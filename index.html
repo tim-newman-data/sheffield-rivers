@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sheaf Valley Corridor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Barlow+Condensed:wght@300;400;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
+<style>
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal; font-style: normal;
+    font-size: 18px; line-height: 1;
+    letter-spacing: normal; text-transform: none;
+    display: inline-block; white-space: nowrap;
+    word-wrap: normal; direction: ltr;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+<script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --walk:        #E07820;   /* amber  — walk */
+    --stepfree:    #C0392B;   /* coral red — step-free */
+    --cycle:       #1A9E6E;   /* teal   — cycle */
+    --vision:      #9B59B6;   /* purple — vision/proposed */
+    --project:     #E63946;   /* red    — project pins */
+
+    --bg:          #f2f5f0;
+    --panel:       rgba(255,255,255,0.97);
+    --panel-light: rgba(244,248,244,0.98);
+    --border:      rgba(0,60,30,0.1);
+    --border-hi:   rgba(26,158,110,0.4);
+    --text:        #1a2a20;
+    --muted:       #6a8a78;
+    --accent:      #1a7a5a;
+    --shadow:      0 2px 12px rgba(0,0,0,0.1);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Barlow',sans-serif; background:var(--bg); color:var(--text); overflow:hidden; height:100vh; }
+  #map { position:absolute; inset:0; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    position:absolute; top:0; left:0; bottom:0; width:360px;
+    z-index:20; display:flex; flex-direction:column;
+    background:var(--panel); border-right:1px solid var(--border);
+    box-shadow:var(--shadow);
+    transition: transform 0.3s ease;
+  }
+  #sidebar.collapsed { transform: translateX(-360px); }
+
+  /* Collapse tab — always visible on right edge of sidebar */
+  #collapse-tab {
+    position:absolute; top:50%; right:-28px;
+    transform:translateY(-50%);
+    width:28px; height:56px;
+    background:var(--panel); border:1px solid var(--border);
+    border-left:none; border-radius:0 6px 6px 0;
+    box-shadow:3px 0 8px rgba(0,0,0,0.08);
+    cursor:pointer; z-index:21;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; color:var(--muted);
+    transition:color 0.15s;
+    user-select:none;
+  }
+  #collapse-tab:hover { color:var(--accent); }
+
+  #sidebar-header {
+    padding:16px 20px 12px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0; position:relative;
+  }
+  #trust-logo {
+    width:160px; display:block;
+  }
+  #sidebar-header p {
+    margin-top:6px; font-size:10px; font-weight:300;
+    color:var(--muted); letter-spacing:0.08em; text-transform:uppercase;
+  }
+
+  /* ── Layer controls ── */
+  #layer-controls {
+    padding:14px 20px 10px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+
+  .control-label {
+    font-size:9px; font-weight:700; letter-spacing:0.12em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:8px;
+    display:block;
+  }
+
+  .layer-row {
+    display:flex; align-items:center; gap:10px;
+    padding:7px 10px; border-radius:4px; cursor:pointer;
+    border:1px solid transparent; margin-bottom:4px;
+    transition:all 0.15s; user-select:none;
+  }
+  .layer-row:hover { background:rgba(0,0,0,0.03); }
+  .layer-row.checked { background:rgba(0,0,0,0.025); border-color:var(--border); }
+
+  .layer-checkbox {
+    width:16px; height:16px; border-radius:3px; border:2px solid;
+    flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s;
+  }
+  .layer-checkbox svg { display:none; }
+  .layer-row.checked .layer-checkbox svg { display:block; }
+
+  .layer-row[data-layer="walk"]     .layer-checkbox { border-color:var(--walk);    }
+  .layer-row[data-layer="stepfree"] .layer-checkbox { border-color:var(--stepfree);}
+  .layer-row[data-layer="cycle"]    .layer-checkbox { border-color:var(--cycle);   }
+  .layer-row.checked[data-layer="walk"]     .layer-checkbox { background:var(--walk);     border-color:var(--walk);    }
+  .layer-row.checked[data-layer="stepfree"] .layer-checkbox { background:var(--stepfree); border-color:var(--stepfree);}
+  .layer-row.checked[data-layer="cycle"]    .layer-checkbox { background:var(--cycle);    border-color:var(--cycle);   }
+
+  .layer-swatch {
+    width:28px; height:4px; border-radius:2px; flex-shrink:0;
+  }
+  .layer-row[data-layer="walk"]     .layer-swatch { background:var(--walk); }
+  .layer-row[data-layer="stepfree"] .layer-swatch { background:var(--stepfree); }
+  .layer-row[data-layer="cycle"]    .layer-swatch { background:var(--cycle); }
+
+  .layer-label {
+    font-size:12px; font-weight:500; color:var(--text); flex:1; line-height:1.3;
+  }
+  .layer-icon { font-size:15px; flex-shrink:0; }
+
+  /* Vision toggle */
+  .vision-row {
+    margin-top:8px; padding:8px 10px;
+    border-radius:4px; border:1px solid transparent;
+    cursor:pointer; user-select:none; transition:all 0.15s;
+    display:flex; align-items:center; gap:10px;
+  }
+  .vision-row:hover { background:rgba(0,0,0,0.03); }
+  .vision-row.checked {
+    background:rgba(155,89,182,0.06);
+    border-color:rgba(155,89,182,0.25);
+  }
+
+  .vision-checkbox {
+    width:16px; height:16px; border-radius:3px;
+    border:2px solid var(--vision); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s;
+  }
+  .vision-checkbox svg { display:none; }
+  .vision-row.checked .vision-checkbox {
+    background:var(--vision);
+  }
+  .vision-row.checked .vision-checkbox svg { display:block; }
+
+  .vision-label {
+    font-size:12px; font-weight:500; flex:1; line-height:1.3;
+    color:var(--text);
+  }
+  .vision-row.checked .vision-label { color:var(--vision); }
+  .vision-sub {
+    font-size:10px; font-weight:300; color:var(--muted);
+    display:block; margin-top:1px;
+  }
+
+  /* ── Hint ── */
+  #hint {
+    flex:1; display:flex; align-items:center; justify-content:center;
+    padding:24px; text-align:center;
+  }
+  #hint p { font-size:12px; color:var(--muted); font-weight:300; line-height:1.7; }
+  #hint p strong { display:block; font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px; }
+
+  /* ── Detail panel ── */
+  #detail-panel { display:none; flex-direction:column; flex:1; overflow:hidden; }
+  #detail-panel.visible { display:flex; }
+
+  #detail-header {
+    padding:14px 20px 10px; border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  #detail-section-name {
+    font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:700;
+    letter-spacing:0.02em; color:var(--text); line-height:1.3; padding-right:24px;
+  }
+  #detail-close {
+    float:right; background:none; border:none; color:var(--muted);
+    font-size:16px; cursor:pointer; padding:0 0 0 8px; transition:color 0.15s;
+    margin-top:-2px;
+  }
+  #detail-close:hover { color:var(--text); }
+
+  #detail-body { flex:1; overflow-y:auto; padding:12px 20px 16px; }
+  #detail-body::-webkit-scrollbar { width:3px; }
+  #detail-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* Segment rows in detail */
+  .seg-row {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 0; border-bottom:1px solid var(--border);
+  }
+  .seg-row:last-child { border-bottom:none; }
+  .seg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .seg-info { flex:1; }
+  .seg-name { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; }
+  .seg-dist { font-size:11px; color:var(--muted); font-weight:300; }
+  .seg-tags { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; }
+
+  .tag { font-size:9px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
+         padding:2px 5px; border-radius:2px; border:1px solid; }
+  .tag-warn  { color:#b56000; border-color:rgba(181,96,0,0.3);   background:rgba(181,96,0,0.07); }
+  .tag-bad   { color:#c0392b; border-color:rgba(192,57,43,0.3);  background:rgba(192,57,43,0.06); }
+  .tag-steep { color:#8e6000; border-color:rgba(142,96,0,0.3);   background:rgba(142,96,0,0.06); }
+
+  /* Project card in detail */
+  .project-card {
+    margin-top:12px; padding:12px; border-radius:4px;
+    border:1px solid rgba(155,89,182,0.25); background:rgba(155,89,182,0.06);
+  }
+  .project-card-title {
+    font-size:12px; font-weight:600; color:var(--text); margin-bottom:4px;
+  }
+  .project-card-desc {
+    font-size:13px; color:var(--muted); line-height:1.75; font-weight:400;
+  }
+  .project-card-img {
+    width:100%; border-radius:3px; margin-top:8px; display:block;
+    max-height:160px; object-fit:cover; cursor:zoom-in;
+  }
+  .project-card-link {
+    display:inline-block; margin-top:8px; font-size:10px; font-weight:600;
+    letter-spacing:0.06em; text-transform:uppercase; color:var(--vision);
+    text-decoration:none;
+  }
+  .project-card-link:hover { text-decoration:underline; }
+  .project-section-label {
+    font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--vision); margin-top:14px; margin-bottom:6px; display:block;
+  }
+
+  /* ── Project popup (for point markers) ── */
+  .maplibregl-popup-content {
+    font-family:'Barlow',sans-serif !important;
+    padding:14px !important; border-radius:6px !important;
+    box-shadow:0 4px 20px rgba(0,0,0,0.15) !important;
+    max-width:260px !important;
+  }
+  .popup-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:5px; }
+  .popup-desc  { font-size:13px; color:var(--muted); line-height:1.75; font-weight:400; }
+  .popup-img   { width:100%; border-radius:3px; margin-top:8px; max-height:120px; object-fit:cover; display:block; }
+  .popup-link  { display:inline-block; margin-top:8px; font-size:10px; font-weight:600;
+                 letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); text-decoration:none; }
+
+  /* ── Nav ── */
+  #nav-arrows {
+    position:absolute; bottom:24px; left:50%;
+    transform:translateX(calc(-50% + 180px));
+    display:flex; gap:6px; z-index:20;
+    transition: transform 0.3s ease;
+  }
+  body.sidebar-collapsed #nav-arrows {
+    transform:translateX(-50%);
+  }
+  .nav-btn {
+    width:38px; height:38px; border-radius:4px;
+    background:var(--panel); border:1px solid var(--border);
+    color:var(--text); font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow); transition:all 0.15s;
+  }
+  .nav-btn:hover { border-color:var(--border-hi); color:var(--accent); }
+  .nav-btn:disabled { opacity:0.25; cursor:default; }
+
+  /* ── POI markers ── */
+  .poi-marker {
+    width:28px; height:28px; border-radius:50%;
+    border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.2);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:transform 0.15s;
+  }
+  .poi-marker:hover { transform:scale(1.15); }
+  .poi-marker .material-symbols-outlined { font-size:15px; color:white; pointer-events:none; }
+  .poi-marker.refreshments { background:#7a8a8a; }
+  .poi-marker.wheels       { background:#7a8a8a; }
+
+  /* ── Lightbox ── */
+  #lightbox {
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(0,0,0,0.85); align-items:center; justify-content:center;
+    cursor:zoom-out;
+  }
+  #lightbox.open { display:flex; }
+  #lightbox img {
+    max-width:90vw; max-height:90vh;
+    border-radius:6px; box-shadow:0 8px 40px rgba(0,0,0,0.5);
+    object-fit:contain;
+  }
+  #lightbox-close {
+    position:fixed; top:20px; right:24px;
+    background:none; border:none; color:white;
+    font-size:28px; cursor:pointer; line-height:1;
+    opacity:0.8; transition:opacity 0.15s;
+  }
+  #lightbox-close:hover { opacity:1; }
+
+  /* MapLibre overrides */
+  .maplibregl-popup-close-button { font-size:16px !important; color:var(--muted) !important; }
+  .maplibregl-ctrl-attrib { background:rgba(255,255,255,0.85)!important; font-size:9px!important; }
+  .maplibregl-ctrl-group { background:var(--panel)!important; border:1px solid var(--border)!important;
+    border-radius:4px!important; box-shadow:var(--shadow)!important; }
+  .maplibregl-ctrl-group button { background:transparent!important; width:36px!important; height:36px!important; }
+</style>
+</head>
+<body>
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div id="map"></div>
+
+<div id="sidebar">
+  <div id="collapse-tab" onclick="toggleSidebar()">&#8249;</div>
+  <div id="sidebar-header">
+    <img src="https://static.wixstatic.com/media/f2e522_5f689e579c2847af9f330fe6f89ed894~mv2.jpg/v1/fill/w_362,h_160,al_c,q_80,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo_rgb.jpg"" alt="Sheaf &amp; Porter Rivers Trust" id="trust-logo">
+    <p>River Sheaf Active Travel Corridor</p>
+  </div>
+
+  <div id="layer-controls">
+    <span class="control-label">Show routes</span>
+
+    <div class="layer-row checked" data-layer="walk" onclick="toggleLayer('walk', this)">
+      <div class="layer-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="material-symbols-outlined" style="color:var(--walk)">directions_walk</span>
+      <div class="layer-swatch"></div>
+      <span class="layer-label">River Sheaf Walk</span>
+    </div>
+
+    <div class="layer-row" data-layer="stepfree" onclick="toggleLayer('stepfree', this)">
+      <div class="layer-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="material-symbols-outlined" style="color:var(--stepfree)">accessible</span>
+      <div class="layer-swatch"></div>
+      <span class="layer-label">River Sheaf Walk (Step Free)</span>
+    </div>
+
+    <div class="layer-row" data-layer="cycle" onclick="toggleLayer('cycle', this)">
+      <div class="layer-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="material-symbols-outlined" style="color:var(--cycle)">pedal_bike</span>
+      <div class="layer-swatch"></div>
+      <span class="layer-label">Sheaf Valley Cycle Route</span>
+    </div>
+
+    <div class="vision-row" id="vision-toggle" onclick="toggleVision()">
+      <div class="vision-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div style="flex:1">
+        <span class="vision-label"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;color:var(--vision)">construction</span> Show the vision
+          <span class="vision-sub">Proposed routes &amp; improvement projects</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">
+    <p><strong>Click any section of the route</strong>to see details about current conditions and what's planned. Enable "Show the vision" to see improvement project markers.</p>
+  </div>
+
+  <div id="detail-panel">
+    <div id="detail-header">
+      <button id="detail-close" onclick="closeDetail()">✕</button>
+      <div id="detail-section-name"></div>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
+<div id="nav-arrows">
+  <button class="nav-btn" id="btn-prev" onclick="navigateSection(-1)" disabled>←</button>
+  <button class="nav-btn" id="btn-next" onclick="navigateSection(1)"  disabled>→</button>
+</div>
+
+<script>
+
+// Data — loaded from external files in ./data/
+let GEOJSON   = null;
+let WATERSHED = null;
+let PROJECTS  = [];
+let POIS      = [];
+
+async function loadData() {
+  const [geo, water, proj, pois] = await Promise.all([
+    fetch('./data/sheaf.geojson').then(r => r.json()),
+    fetch('./data/watershed.geojson').then(r => r.json()),
+    fetch('./data/projects.json').then(r => r.json()),
+    fetch('./data/pois.json').then(r => r.json())
+  ]);
+  GEOJSON = geo; WATERSHED = water; PROJECTS = proj; POIS = pois;
+}
+
+const MAPTILER_KEY = 'WMqBimDurJHRmbcELx6H';
+
+// ── DATA ─────────────────────────────────────────────────────────────────────
+
+// Projects — segment_id OR lat/lon for point projects
+// ── SECTION ORDER ─────────────────────────────────────────────────────────────
+
+
+const SECTION_ORDER = [
+  "Dore & Totley Station to Abbey Lane","Abbey Lane to Archer Road",
+  "Archer Road to Moscar Wheel","Moscar Wheel to Archer Road",
+  "Norton Hammer Woodland","Woodseats Road to Rydal Road",
+  "Rydal Road to Broadfield Way","Broadfield Way to Saxon Road",
+  "Saxon Road to London Road","London Road to Myrtle Road",
+  "Myrtle Road to Charlotte Road","Charlotte Road to Duchess Road",
+  "Duchess Road to Granville Square","Granville Square to Sheffield Station",
+  "Sheffield Station to the Don Confluence"
+];
+
+const sectionMap = {};
+GEOJSON.features.forEach(f => {
+  const s = f.properties.section;
+  if (!sectionMap[s]) sectionMap[s] = [];
+  sectionMap[s].push(f);
+});
+const sections = SECTION_ORDER.filter(s => sectionMap[s]);
+
+// Index projects by section (via segment)
+const segmentSection = {};
+GEOJSON.features.forEach(f => { segmentSection[f.properties.segment_id] = f.properties.section; });
+
+// ── LAYER DEFINITIONS ─────────────────────────────────────────────────────────
+// Each layer: which segments it shows, offset, colour
+const LAYERS = {
+  walk:     { color:'#E07820', offset: 0,   filter: p => !p.proposed && p.walking_default },
+  stepfree: { color:'#C0392B', offset: 4,   filter: p => !p.proposed && !p.on_road && p.step_free },
+  cycle:    { color:'#1A9E6E', offset:-4,   filter: p => !p.proposed && p.cycleway },
+};
+const VISION_COLOR = '#9B59B6';
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let activeLayers  = new Set(['walk']);
+let visionOn      = false;
+let activeSection = null;
+let activeProject = null;
+let mapReady      = false;
+let projectMarkers = [];
+let poiMarkers     = [];
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: `https://api.maptiler.com/maps/dataviz/style.json?key=${MAPTILER_KEY}`,
+  center: [-1.50993, 53.34640],
+  zoom: 13,
+  pitch: 55, bearing: -25, antialias: true,
+  maxZoom: 17,
+});
+
+map.addControl(new maplibregl.NavigationControl({ visualizePitch:true }), 'bottom-right');
+
+map.on('load', async () => {
+  await loadData();
+  // Terrain
+  try {
+    map.addSource('terrain', { type:'raster-dem', url:`https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`, tileSize:256 });
+    map.setTerrain({ source:'terrain', exaggeration:2.0 });
+  } catch(e) {}
+
+  // Suppress POI icons at low zoom
+  map.getStyle().layers.forEach(layer => {
+    if (layer.type !== 'symbol') return;
+    const id = layer.id || '';
+    if (id.match(/poi|amenity|shop|tourism|leisure|sport|office|craft|emergency/)) {
+      try { map.setLayoutProperty(id, 'visibility', 'none'); } catch(e) {}
+    }
+  });
+
+  // Subtle river boost — just a nudge darker than dataviz defaults
+  try {
+    map.setPaintProperty('River', 'line-color', '#6aabcc');
+    map.setPaintProperty('River', 'line-opacity', 0.9);
+  } catch(e) {}
+  try {
+    map.setPaintProperty('Water', 'fill-color', '#8ec8e0');
+    map.setPaintProperty('Water', 'fill-opacity', 0.95);
+  } catch(e) {}
+  try {
+    map.setPaintProperty('Water shadow', 'fill-color', '#6aabcc');
+    map.setPaintProperty('Water shadow', 'fill-opacity', 0.3);
+  } catch(e) {}
+
+  // Watershed polygon — subtle fill, visible only at low zoom
+  map.addSource('watershed', { type:'geojson', data:WATERSHED });
+
+  // Fill — fades out as you zoom in
+  map.addLayer({
+    id:'watershed-fill', type:'fill', source:'watershed',
+    paint:{
+      'fill-color':'#4a9a8a',
+      'fill-opacity':['interpolate',['linear'],['zoom'], 10,0.15, 12,0.1, 13.5,0]
+    }
+  }, 'Forest');
+
+  // Border — slightly more visible than fill, also fades
+  map.addLayer({
+    id:'watershed-line', type:'line', source:'watershed',
+    paint:{
+      'line-color':'#2a7a6a',
+      'line-width':1.8,
+      'line-opacity':['interpolate',['linear'],['zoom'], 10,0.55, 12,0.35, 13.5,0],
+      'line-dasharray':[4,3]
+    }
+  }, 'Forest');
+
+    // Add one source per segment, three line layers per segment (one per route layer) + vision
+  GEOJSON.features.forEach(f => {
+    const sid = f.properties.segment_id;
+    map.addSource(`seg-${sid}`, { type:'geojson', data:f });
+
+    // Walk, stepfree, cycle layers
+    Object.entries(LAYERS).forEach(([key, cfg]) => {
+      // Casing — white line drawn FIRST (below), wider than main line
+      map.addLayer({ id:`${sid}-${key}-glow`, type:'line', source:`seg-${sid}`,
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{ 'line-color':'#ffffff', 'line-width':8, 'line-opacity':0,
+                'line-offset':['interpolate',['linear'],['zoom'],10,cfg.offset*0.5,15,cfg.offset] }
+      });
+      // Main coloured line — drawn SECOND (on top of casing)
+      map.addLayer({ id:`${sid}-${key}`, type:'line', source:`seg-${sid}`,
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{ 'line-color':cfg.color, 'line-width':3, 'line-opacity':0,
+                'line-offset':['interpolate',['linear'],['zoom'],10,cfg.offset*0.5,15,cfg.offset] }
+      });
+      map.on('click', `${sid}-${key}`, e => { e.originalEvent.stopPropagation(); selectSection(f.properties.section); });
+      map.on('mouseenter', `${sid}-${key}`, () => { map.getCanvas().style.cursor='pointer'; });
+      map.on('mouseleave', `${sid}-${key}`, () => { map.getCanvas().style.cursor=''; });
+    });
+
+    // Vision layer (proposed segments)
+    map.addLayer({ id:`${sid}-vision`, type:'line', source:`seg-${sid}`,
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{ 'line-color':VISION_COLOR, 'line-width':2.5, 'line-opacity':0, 'line-dasharray':[5,3] }
+    });
+    map.on('click', `${sid}-vision`, e => { e.originalEvent.stopPropagation(); selectSection(f.properties.section); });
+    map.on('mouseenter', `${sid}-vision`, () => { map.getCanvas().style.cursor='pointer'; });
+    map.on('mouseleave', `${sid}-vision`, () => { map.getCanvas().style.cursor=''; });
+  });
+
+  // One-way cycle arrows — draw a custom arrow icon then add symbol layer
+  const arrowSize = 24;
+  const arrowCanvas = document.createElement('canvas');
+  arrowCanvas.width = arrowSize;
+  arrowCanvas.height = arrowSize;
+  const ctx = arrowCanvas.getContext('2d');
+  // Draw a simple chevron pointing right (MapLibre will rotate to line direction)
+  ctx.strokeStyle = '#1A9E6E';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(6,  6);
+  ctx.lineTo(18, 12);
+  ctx.lineTo(6,  18);
+  ctx.stroke();
+
+  map.addImage('cycle-arrow', { width:arrowSize, height:arrowSize,
+    data: ctx.getImageData(0, 0, arrowSize, arrowSize).data
+  });
+
+  const oneWayFeatures = GEOJSON.features.filter(f =>
+    f.properties.one_way && f.properties.cycleway && !f.properties.proposed
+  );
+  map.addSource('oneway-arrows', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: oneWayFeatures }
+  });
+  map.addLayer({
+    id: 'oneway-arrows',
+    type: 'symbol',
+    source: 'oneway-arrows',
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 80,
+      'icon-image': 'cycle-arrow',
+      'icon-size': 1,
+      'icon-rotation-alignment': 'map',
+      'icon-allow-overlap': true,
+    },
+    paint: {
+      'icon-opacity': ['interpolate',['linear'],['zoom'], 12,0, 13,1]
+    }
+  });
+
+  mapReady = true;
+  updateMapLayers();
+  renderPOIs();
+});
+
+// ── CONTROLS ──────────────────────────────────────────────────────────────────
+
+function toggleLayer(key, el) {
+  if (activeLayers.has(key)) {
+    if (activeLayers.size === 1) return; // prevent zero selection
+    activeLayers.delete(key);
+    el.classList.remove('checked');
+  } else {
+    activeLayers.add(key);
+    el.classList.add('checked');
+  }
+  updateMapLayers();
+  if (activeSection) updateDetail();
+}
+
+function toggleVision() {
+  visionOn = !visionOn;
+  document.getElementById('vision-toggle').classList.toggle('checked', visionOn);
+  updateMapLayers();
+  updateProjectMarkers();
+  if (activeSection) updateDetail();
+}
+
+// ── MAP LAYER UPDATES ─────────────────────────────────────────────────────────
+
+function offsetExpr(offset) {
+  return ['interpolate',['linear'],['zoom'], 10, offset*0.5, 15, offset];
+}
+
+function updateMapLayers() {
+  if (!mapReady) return;
+
+  GEOJSON.features.forEach(f => {
+    const sid  = f.properties.segment_id;
+    const p    = f.properties;
+    const sel  = activeSection !== null && activeSection === p.section;
+
+    Object.entries(LAYERS).forEach(([key, cfg]) => {
+      const show = activeLayers.has(key) && cfg.filter(p);
+      const hasSelection = activeSection !== null;
+      const opacity = !show ? 0 : hasSelection ? (sel ? 1 : 0.6) : 0.7;
+      map.setPaintProperty(`${sid}-${key}`, 'line-opacity', opacity);
+      map.setPaintProperty(`${sid}-${key}`, 'line-width',   show && sel ? 5 : 3);
+      // Casing hidden always — causes bleed with offset lines
+      map.setPaintProperty(`${sid}-${key}-glow`, 'line-opacity', 0);
+      map.setPaintProperty(`${sid}-${key}-glow`, 'line-width',   0);
+    });
+
+    // Vision
+    const showVision = visionOn && p.proposed;
+    const hasSelection = activeSection !== null;
+    map.setPaintProperty(`${sid}-vision`, 'line-opacity',
+      !showVision ? 0 : hasSelection ? (sel ? 1 : 0.6) : 0.6
+    );
+    map.setPaintProperty(`${sid}-vision`, 'line-width', showVision && sel ? 4 : 2.5);
+  });
+
+  // Arrows only visible when cycle layer is active
+  if (mapReady) {
+    map.setLayoutProperty('oneway-arrows', 'visibility',
+      activeLayers.has('cycle') ? 'visible' : 'none'
+    );
+  }
+}
+
+// ── PROJECT MARKERS ───────────────────────────────────────────────────────────
+
+function segmentMidpoint(segment_id) {
+  // Return the midpoint coordinate of a segment's geometry
+  const feature = GEOJSON.features.find(f => f.properties.segment_id === segment_id);
+  if (!feature) return null;
+  const coords = feature.geometry.coordinates;
+  const mid = coords[Math.floor(coords.length / 2)];
+  return [mid[0], mid[1]];
+}
+
+function makeMarkerEl() {
+  const el = document.createElement('div');
+  el.style.cssText = `
+    width:30px; height:30px; border-radius:50%;
+    background:#9B59B6; border:2.5px solid white;
+    box-shadow:0 2px 8px rgba(0,0,0,0.25);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    pointer-events:auto; transition:outline 0.15s, box-shadow 0.15s;
+  `;
+  const icon = document.createElement('span');
+  icon.className = 'material-symbols-outlined';
+  icon.style.cssText = 'font-size:16px; color:white; pointer-events:none; user-select:none;';
+  icon.textContent = 'construction';
+  el.appendChild(icon);
+  el._inner = el; // self-reference so highlight code works unchanged
+  return el;
+}
+
+function updateProjectMarkers() {
+  projectMarkers.forEach(m => m.remove());
+  projectMarkers = [];
+
+  if (!visionOn) return;
+
+  PROJECTS.forEach(proj => {
+    let lngLat = null;
+    if (proj.lat && proj.lon) {
+      lngLat = [proj.lon, proj.lat];
+    } else if (proj.segment_id) {
+      lngLat = segmentMidpoint(proj.segment_id);
+    }
+    if (!lngLat) return;
+
+    const el = makeMarkerEl();
+    el._proj = proj; // store reference for highlight updates
+
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(lngLat)
+      .addTo(map);
+
+    el._inner.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showProject(proj);
+    });
+
+    projectMarkers.push(marker);
+  });
+
+  updateMarkerHighlights();
+}
+
+function updateMarkerHighlights() {
+  if (!visionOn) return;
+  projectMarkers.forEach(marker => {
+    const el = marker.getElement();
+    const proj = el._proj;
+    if (!proj) return;
+    const projSection = proj.segment_id ? segmentSection[proj.segment_id] : null;
+    const isSelected = proj.project_id === activeProject ||
+      (activeSection !== null && projSection === activeSection);
+    el.style.outline   = isSelected ? '3px solid white' : 'none';
+    el.style.outlineOffset = isSelected ? '2px' : '0';
+    el.style.boxShadow = isSelected
+      ? '0 0 0 5px #9B59B6, 0 4px 12px rgba(0,0,0,0.3)'
+      : '0 2px 8px rgba(0,0,0,0.25)';
+    el.style.zIndex    = isSelected ? '10' : '1';
+  });
+}
+
+// ── SECTION SELECTION ─────────────────────────────────────────────────────────
+
+function selectSection(name) {
+  activeSection = name;
+  activeProject = null;
+  updateMapLayers();
+  updateDetail();
+  flyToSection(name);
+  updateNavButtons();
+  updateMarkerHighlights();
+}
+
+function closeDetail() {
+  activeSection = null;
+  activeProject = null;
+  updateMapLayers();
+  document.getElementById('detail-panel').classList.remove('visible');
+  document.getElementById('hint').style.display = 'flex';
+  updateNavButtons();
+  updateMarkerHighlights();
+}
+
+function showProject(proj) {
+  activeSection = null;
+  activeProject = proj.project_id;
+  updateMapLayers();
+  updateNavButtons();
+  updateMarkerHighlights();
+
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar.classList.contains('collapsed')) toggleSidebar();
+
+  document.getElementById('hint').style.display = 'none';
+  document.getElementById('detail-panel').classList.add('visible');
+  document.getElementById('detail-section-name').innerHTML =
+    `<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:var(--vision);margin-right:5px">construction</span>${proj.title}`;
+
+  let html = '';
+  if (proj.description) {
+    html += `<p style="font-size:13px;color:var(--muted);line-height:1.75;font-weight:400;margin-bottom:12px">${proj.description}</p>`;
+  }
+  if (proj.image_url) {
+    html += `<img src="${proj.image_url}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
+  }
+  if (proj.image2_url) {
+    html += `<img src="${proj.image2_url}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
+  }
+  if (proj.link) {
+    html += `<a href="${proj.link}" target="_blank" class="project-card-link">Read more →</a>`;
+  }
+
+  // CTAs
+  const ctas = [
+    { key:'url_join',       icon:'group_add',          label:'Join the trust to support this work' },
+    { key:'url_landowner',  icon:'mail',               label:'Contact the landowner to express support' },
+    { key:'url_councillor', icon:'mail',               label:'Email your councillor' },
+    { key:'url_share',      icon:'share',              label:'Share this route' },
+    { key:'url_donate',     icon:'payments',           label:'Donate to help unlock this route' },
+    { key:'url_volunteer',  icon:'volunteer_activism', label:'Volunteer to improve the route' },
+  ];
+  const activeCTAs = ctas.filter(c => proj[c.key]);
+  if (activeCTAs.length) {
+    html += `<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:8px">`;
+    activeCTAs.forEach(c => {
+      html += `<a href="${proj[c.key]}" target="_blank" style="
+        display:flex;align-items:center;gap:10px;
+        padding:9px 12px;border-radius:4px;
+        background:rgba(155,89,182,0.07);border:1px solid rgba(155,89,182,0.2);
+        color:var(--vision);text-decoration:none;
+        font-size:12px;font-weight:500;line-height:1.3;
+        transition:background 0.15s;
+      " onmouseover="this.style.background='rgba(155,89,182,0.14)'"
+         onmouseout="this.style.background='rgba(155,89,182,0.07)'">
+        <span class="material-symbols-outlined" style="font-size:18px;flex-shrink:0">${c.icon}</span>
+        ${c.label}
+      </a>`;
+    });
+    html += `</div>`;
+  }
+
+  if (!html) {
+    html = `<p style="font-size:12px;color:var(--muted);font-style:italic">No further details available.</p>`;
+  }
+  document.getElementById('detail-body').innerHTML = html;
+}
+
+function navigateSection(dir) {
+  const next = sections.indexOf(activeSection) + dir;
+  if (next >= 0 && next < sections.length) selectSection(sections[next]);
+}
+
+function flyToSection(name) {
+  const coords = (sectionMap[name]||[]).flatMap(f => f.geometry.coordinates.map(c=>[c[0],c[1]]));
+  if (!coords.length) return;
+  const lngs = coords.map(c=>c[0]), lats = coords.map(c=>c[1]);
+  map.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]],
+    { padding:{top:80,bottom:120,left:330,right:80}, maxZoom:17, duration:850 });
+}
+
+function updateNavButtons() {
+  const i = sections.indexOf(activeSection);
+  document.getElementById('btn-prev').disabled = i <= 0;
+  document.getElementById('btn-next').disabled = i < 0 || i >= sections.length-1;
+}
+
+// ── DETAIL PANEL ──────────────────────────────────────────────────────────────
+
+function updateDetail() {
+  if (!activeSection) return;
+  document.getElementById('hint').style.display = 'none';
+  document.getElementById('detail-panel').classList.add('visible');
+  document.getElementById('detail-section-name').textContent = activeSection;
+
+  const features = sectionMap[activeSection] || [];
+  const body = document.getElementById('detail-body');
+  let html = '';
+
+  // Vision improvement projects only (if vision is on)
+  if (visionOn) {
+    const sectionProjects = PROJECTS.filter(proj => {
+      if (proj.segment_id) return segmentSection[proj.segment_id] === activeSection;
+      return false;
+    });
+
+    if (sectionProjects.length) {
+      html += `<span class="project-section-label" style="color:var(--vision)"><span class="material-symbols-outlined" style="font-size:11px;vertical-align:-2px">construction</span> Vision — Improvement Projects</span>`;
+      sectionProjects.forEach(proj => {
+        html += `
+          <div class="project-card">
+            <div class="project-card-title">${proj.title}</div>
+            ${proj.description ? `<div class="project-card-desc">${proj.description}</div>` : ''}
+            ${proj.image_url ? `<img class="project-card-img" src="${proj.image_url}" onclick="openLightbox(this.src)" alt="">` : ''}
+            <a class="project-card-link" href="#" onclick="event.preventDefault();showProject(${JSON.stringify(proj).replace(/"/g,'&quot;')})">Read more →</a>
+          </div>`;
+      });
+    } else {
+      html = `<p style="font-size:12px;color:var(--muted);font-style:italic;padding-top:4px">No improvement projects for this section.</p>`;
+    }
+  } else {
+    html = `<p style="font-size:12px;color:var(--muted);font-style:italic;padding-top:4px">Enable "Show the vision" to see improvement projects for this section.</p>`;
+  }
+
+  body.innerHTML = html;
+}
+
+function renderPOIs() {
+  poiMarkers.forEach(m => m.remove());
+  poiMarkers = [];
+
+  POIS.forEach(poi => {
+    const isWheels = poi.layer === 'Sheaf Wheels';
+    const el = document.createElement('div');
+    el.className = `poi-marker ${isWheels ? 'wheels' : 'refreshments'}`;
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-outlined';
+    icon.textContent = isWheels ? 'circle' : 'local_cafe';
+    el.appendChild(icon);
+
+    const popup = new maplibregl.Popup({ offset:16, maxWidth:'200px', closeButton:false })
+      .setHTML(`<div class="popup-title">${poi.name}</div><div class="popup-desc">${poi.layer}</div>`);
+
+    el.addEventListener('mouseenter', () => { popup.setLngLat([poi.lng, poi.lat]).addTo(map); });
+    el.addEventListener('mouseleave', () => popup.remove());
+
+    const marker = new maplibregl.Marker({ element:el, anchor:'center' })
+      .setLngLat([poi.lng, poi.lat])
+      .addTo(map);
+
+    poiMarkers.push(marker);
+  });
+
+  updatePOIVisibility();
+}
+
+const POI_MIN_ZOOM = 16;
+
+function updatePOIVisibility() {
+  const visible = map.getZoom() >= POI_MIN_ZOOM;
+  poiMarkers.forEach(m => {
+    m.getElement().style.display = visible ? 'flex' : 'none';
+  });
+}
+
+map.on('zoom', updatePOIVisibility);
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
+// ── SIDEBAR COLLAPSE ─────────────────────────────────────────────────────────
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const tab = document.getElementById('collapse-tab');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  tab.innerHTML = collapsed ? '&#8250;' : '&#8249;';
+  // Nudge map to rerender
+  setTimeout(() => map.resize(), 310);
+}
+</script>
+</body>
+</html>
