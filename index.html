@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sheaf Valley Corridor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Barlow+Condensed:wght@300;400;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
+<style>
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal; font-style: normal;
+    font-size: 18px; line-height: 1;
+    letter-spacing: normal; text-transform: none;
+    display: inline-block; white-space: nowrap;
+    word-wrap: normal; direction: ltr;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+<script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --walk:        #E07820;   /* amber  — walk */
+    --stepfree:    #C0392B;   /* coral red — step-free */
+    --cycle:       #1A9E6E;   /* teal   — cycle */
+    --vision:      #9B59B6;   /* purple — vision/proposed */
+    --project:     #E63946;   /* red    — project pins */
+
+    --bg:          #f2f5f0;
+    --panel:       rgba(255,255,255,0.97);
+    --panel-light: rgba(244,248,244,0.98);
+    --border:      rgba(0,60,30,0.1);
+    --border-hi:   rgba(26,158,110,0.4);
+    --text:        #1a2a20;
+    --muted:       #6a8a78;
+    --accent:      #1a7a5a;
+    --shadow:      0 2px 12px rgba(0,0,0,0.1);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Barlow',sans-serif; background:var(--bg); color:var(--text); overflow:hidden; height:100vh; }
+  #map { position:absolute; inset:0; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    position:absolute; top:0; left:0; bottom:0; width:360px;
+    z-index:20; display:flex; flex-direction:column;
+    background:var(--panel); border-right:1px solid var(--border);
+    box-shadow:var(--shadow);
+    transition: transform 0.3s ease;
+  }
+  #sidebar.collapsed { transform: translateX(-360px); }
+
+  /* Collapse tab — always visible on right edge of sidebar */
+  #collapse-tab {
+    position:absolute; top:50%; right:-28px;
+    transform:translateY(-50%);
+    width:28px; height:56px;
+    background:var(--panel); border:1px solid var(--border);
+    border-left:none; border-radius:0 6px 6px 0;
+    box-shadow:3px 0 8px rgba(0,0,0,0.08);
+    cursor:pointer; z-index:21;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; color:var(--muted);
+    transition:color 0.15s;
+    user-select:none;
+  }
+  #collapse-tab:hover { color:var(--accent); }
+
+  #sidebar-header {
+    padding:16px 20px 12px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0; position:relative;
+  }
+  #trust-logo {
+    width:160px; display:block;
+  }
+  #sidebar-header p {
+    margin-top:6px; font-size:10px; font-weight:300;
+    color:var(--muted); letter-spacing:0.08em; text-transform:uppercase;
+  }
+
+  /* ── Layer controls ── */
+  #layer-controls {
+    padding:14px 20px 10px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+
+  .control-label {
+    font-size:9px; font-weight:700; letter-spacing:0.12em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:8px;
+    display:block;
+  }
+
+  .layer-row {
+    display:flex; align-items:center; gap:10px;
+    padding:7px 10px; border-radius:4px; cursor:pointer;
+    border:1px solid transparent; margin-bottom:4px;
+    transition:all 0.15s; user-select:none;
+  }
+  .layer-row:hover { background:rgba(0,0,0,0.03); }
+  .layer-row.checked { background:rgba(0,0,0,0.025); border-color:var(--border); }
+
+  .layer-checkbox {
+    width:16px; height:16px; border-radius:3px; border:2px solid;
+    flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s;
+  }
+  .layer-checkbox svg { display:none; }
+  .layer-row.checked .layer-checkbox svg { display:block; }
+
+  .layer-row[data-layer="walk"]     .layer-checkbox { border-color:var(--walk);    }
+  .layer-row[data-layer="stepfree"] .layer-checkbox { border-color:var(--stepfree);}
+  .layer-row[data-layer="cycle"]    .layer-checkbox { border-color:var(--cycle);   }
+  .layer-row.checked[data-layer="walk"]     .layer-checkbox { background:var(--walk);     border-color:var(--walk);    }
+  .layer-row.checked[data-layer="stepfree"] .layer-checkbox { background:var(--stepfree); border-color:var(--stepfree);}
+  .layer-row.checked[data-layer="cycle"]    .layer-checkbox { background:var(--cycle);    border-color:var(--cycle);   }
+
+  .layer-swatch {
+    width:28px; height:4px; border-radius:2px; flex-shrink:0;
+  }
+  .layer-row[data-layer="walk"]     .layer-swatch { background:var(--walk); }
+  .layer-row[data-layer="stepfree"] .layer-swatch { background:var(--stepfree); }
+  .layer-row[data-layer="cycle"]    .layer-swatch { background:var(--cycle); }
+
+  .layer-label {
+    font-size:12px; font-weight:500; color:var(--text); flex:1; line-height:1.3;
+  }
+  .layer-icon { font-size:15px; flex-shrink:0; }
+
+  /* Vision toggle */
+  .vision-row {
+    margin-top:8px; padding:8px 10px;
+    border-radius:4px; border:1px solid transparent;
+    cursor:pointer; user-select:none; transition:all 0.15s;
+    display:flex; align-items:center; gap:10px;
+  }
+  .vision-row:hover { background:rgba(0,0,0,0.03); }
+  .vision-row.checked {
+    background:rgba(155,89,182,0.06);
+    border-color:rgba(155,89,182,0.25);
+  }
+
+  .vision-checkbox {
+    width:16px; height:16px; border-radius:3px;
+    border:2px solid var(--vision); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s;
+  }
+  .vision-checkbox svg { display:none; }
+  .vision-row.checked .vision-checkbox {
+    background:var(--vision);
+  }
+  .vision-row.checked .vision-checkbox svg { display:block; }
+
+  .vision-label {
+    font-size:12px; font-weight:500; flex:1; line-height:1.3;
+    color:var(--text);
+  }
+  .vision-row.checked .vision-label { color:var(--vision); }
+  .vision-sub {
+    font-size:10px; font-weight:300; color:var(--muted);
+    display:block; margin-top:1px;
+  }
+
+  /* ── Hint ── */
+  #hint {
+    flex:1; display:flex; align-items:center; justify-content:center;
+    padding:24px; text-align:center;
+  }
+  #hint p { font-size:12px; color:var(--muted); font-weight:300; line-height:1.7; }
+  #hint p strong { display:block; font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px; }
+
+  /* ── Detail panel ── */
+  #detail-panel { display:none; flex-direction:column; flex:1; overflow:hidden; }
+  #detail-panel.visible { display:flex; }
+
+  #detail-header {
+    padding:14px 20px 10px; border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  #detail-section-name {
+    font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:700;
+    letter-spacing:0.02em; color:var(--text); line-height:1.3; padding-right:24px;
+  }
+  #detail-close {
+    float:right; background:none; border:none; color:var(--muted);
+    font-size:16px; cursor:pointer; padding:0 0 0 8px; transition:color 0.15s;
+    margin-top:-2px;
+  }
+  #detail-close:hover { color:var(--text); }
+
+  #detail-body { flex:1; overflow-y:auto; padding:12px 20px 16px; }
+  #detail-body::-webkit-scrollbar { width:3px; }
+  #detail-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* Segment rows in detail */
+  .seg-row {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 0; border-bottom:1px solid var(--border);
+  }
+  .seg-row:last-child { border-bottom:none; }
+  .seg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .seg-info { flex:1; }
+  .seg-name { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; }
+  .seg-dist { font-size:11px; color:var(--muted); font-weight:300; }
+  .seg-tags { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; }
+
+  .tag { font-size:9px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
+         padding:2px 5px; border-radius:2px; border:1px solid; }
+  .tag-warn  { color:#b56000; border-color:rgba(181,96,0,0.3);   background:rgba(181,96,0,0.07); }
+  .tag-bad   { color:#c0392b; border-color:rgba(192,57,43,0.3);  background:rgba(192,57,43,0.06); }
+  .tag-steep { color:#8e6000; border-color:rgba(142,96,0,0.3);   background:rgba(142,96,0,0.06); }
+
+  /* Project card in detail */
+  .project-card {
+    margin-top:12px; padding:12px; border-radius:4px;
+    border:1px solid rgba(155,89,182,0.25); background:rgba(155,89,182,0.06);
+  }
+  .project-card-title {
+    font-size:12px; font-weight:600; color:var(--text); margin-bottom:4px;
+  }
+  .project-card-desc {
+    font-size:13px; color:var(--muted); line-height:1.75; font-weight:400;
+  }
+  .project-card-img {
+    width:100%; border-radius:3px; margin-top:8px; display:block;
+    max-height:160px; object-fit:cover; cursor:zoom-in;
+  }
+  .project-card-link {
+    display:inline-block; margin-top:8px; font-size:10px; font-weight:600;
+    letter-spacing:0.06em; text-transform:uppercase; color:var(--vision);
+    text-decoration:none;
+  }
+  .project-card-link:hover { text-decoration:underline; }
+  .project-section-label {
+    font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--vision); margin-top:14px; margin-bottom:6px; display:block;
+  }
+
+  /* ── Project popup (for point markers) ── */
+  .maplibregl-popup-content {
+    font-family:'Barlow',sans-serif !important;
+    padding:14px !important; border-radius:6px !important;
+    box-shadow:0 4px 20px rgba(0,0,0,0.15) !important;
+    max-width:260px !important;
+  }
+  .popup-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:5px; }
+  .popup-desc  { font-size:13px; color:var(--muted); line-height:1.75; font-weight:400; }
+  .popup-img   { width:100%; border-radius:3px; margin-top:8px; max-height:120px; object-fit:cover; display:block; }
+  .popup-link  { display:inline-block; margin-top:8px; font-size:10px; font-weight:600;
+                 letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); text-decoration:none; }
+
+  /* ── Nav ── */
+  #nav-arrows {
+    position:absolute; bottom:24px; left:50%;
+    transform:translateX(calc(-50% + 180px));
+    display:flex; gap:6px; z-index:20;
+    transition: transform 0.3s ease;
+  }
+  body.sidebar-collapsed #nav-arrows {
+    transform:translateX(-50%);
+  }
+  .nav-btn {
+    width:38px; height:38px; border-radius:4px;
+    background:var(--panel); border:1px solid var(--border);
+    color:var(--text); font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow); transition:all 0.15s;
+  }
+  .nav-btn:hover { border-color:var(--border-hi); color:var(--accent); }
+  .nav-btn:disabled { opacity:0.25; cursor:default; }
+
+  /* ── POI markers ── */
+  .poi-marker {
+    width:28px; height:28px; border-radius:50%;
+    border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.2);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:transform 0.15s;
+  }
+  .poi-marker:hover { transform:scale(1.15); }
+  .poi-marker .material-symbols-outlined { font-size:15px; color:white; pointer-events:none; }
+  .poi-marker.refreshments { background:#7a8a8a; }
+  .poi-marker.wheels       { background:#7a8a8a; }
+
+  /* ── Lightbox ── */
+  #lightbox {
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(0,0,0,0.85); align-items:center; justify-content:center;
+    cursor:zoom-out;
+  }
+  #lightbox.open { display:flex; }
+  #lightbox img {
+    max-width:90vw; max-height:90vh;
+    border-radius:6px; box-shadow:0 8px 40px rgba(0,0,0,0.5);
+    object-fit:contain;
+  }
+  #lightbox-close {
+    position:fixed; top:20px; right:24px;
+    background:none; border:none; color:white;
+    font-size:28px; cursor:pointer; line-height:1;
+    opacity:0.8; transition:opacity 0.15s;
+  }
+  #lightbox-close:hover { opacity:1; }
+
+  /* MapLibre overrides */
+  .maplibregl-popup-close-button { font-size:16px !important; color:var(--muted) !important; }
+  .maplibregl-ctrl-attrib { background:rgba(255,255,255,0.85)!important; font-size:9px!important; }
+  .maplibregl-ctrl-group { background:var(--panel)!important; border:1px solid var(--border)!important;
+    border-radius:4px!important; box-shadow:var(--shadow)!important; }
+  .maplibregl-ctrl-group button { background:transparent!important; width:36px!important; height:36px!important; }
+</style>
+</head>
+<body>
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div id="map"></div>
+
+<div id="sidebar">
+  <div id="collapse-tab" onclick="toggleSidebar()">&#8249;</div>
+  <div id="sidebar-header">
+    <img src="https://static.wixstatic.com/media/f2e522_5f689e579c2847af9f330fe6f89ed894~mv2.jpg/v1/fill/w_362,h_160,al_c,q_80,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo_rgb.jpg"" alt="Sheaf &amp; Porter Rivers Trust" id="trust-logo">
+    <p>River Sheaf Active Travel Corridor</p>
+  </div>
+
+  <div id="layer-controls">
+    <span class="control-label">Show routes</span>
+
+    <div class="layer-row checked" data-layer="walk" onclick="toggleLayer('walk', this)">
+      <div class="layer-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="material-symbols-outlined" style="color:var(--walk)">directions_walk</span>
+      <div class="layer-swatch"></div>
+      <span class="layer-label">River Sheaf Walk</span>
+    </div>
+
+    <div class="layer-row" data-layer="stepfree" onclick="toggleLayer('stepfree', this)">
+      <div class="layer-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="material-symbols-outlined" style="color:var(--stepfree)">accessible</span>
+      <div class="layer-swatch"></div>
+      <span class="layer-label">River Sheaf Walk (Step Free)</span>
+    </div>
+
+    <div class="layer-row" data-layer="cycle" onclick="toggleLayer('cycle', this)">
+      <div class="layer-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="material-symbols-outlined" style="color:var(--cycle)">pedal_bike</span>
+      <div class="layer-swatch"></div>
+      <span class="layer-label">Sheaf Valley Cycle Route</span>
+    </div>
+
+    <div class="vision-row" id="vision-toggle" onclick="toggleVision()">
+      <div class="vision-checkbox">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div style="flex:1">
+        <span class="vision-label"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;color:var(--vision)">construction</span> Show the vision
+          <span class="vision-sub">Proposed routes &amp; improvement projects</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">
+    <p><strong>Click any section of the route</strong>to see details about current conditions and what's planned. Enable "Show the vision" to see improvement project markers.</p>
+  </div>
+
+  <div id="detail-panel">
+    <div id="detail-header">
+      <button id="detail-close" onclick="closeDetail()">✕</button>
+      <div id="detail-section-name"></div>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
+<div id="nav-arrows">
+  <button class="nav-btn" id="btn-prev" onclick="navigateSection(-1)" disabled>←</button>
+  <button class="nav-btn" id="btn-next" onclick="navigateSection(1)"  disabled>→</button>
+</div>
+
+<script>
+const MAPTILER_KEY = 'WMqBimDurJHRmbcELx6H';
+
+// ── DATA ─────────────────────────────────────────────────────────────────────
+
+const GEOJSON = {"type":"FeatureCollection","name":"sheaf","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":[{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":322,"steep":false,"section":"Abbey Lane to Archer Road","segment_id":"sheaf0","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.495887,53.345368],[-1.495924,53.345382],[-1.496834,53.345949],[-1.497123,53.345773],[-1.496746,53.34551],[-1.496337,53.345346],[-1.496025,53.345294],[-1.495963,53.345229]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":542,"steep":true,"section":"London Road to Myrtle Road","segment_id":"sheaf1","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.471191,53.362017],[-1.470923,53.361985],[-1.469593,53.362817],[-1.469378,53.362875],[-1.469389,53.363125],[-1.468927,53.363637],[-1.468466,53.364002],[-1.468123,53.364488],[-1.468685,53.364879]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":596,"steep":true,"section":"London Road to Myrtle Road","segment_id":"sheaf2","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.469652,53.365581],[-1.471087,53.364592],[-1.470856,53.364513],[-1.470497,53.364279],[-1.470695,53.363572],[-1.470561,53.363287],[-1.47091,53.363037],[-1.470797,53.362944],[-1.471371,53.362557],[-1.471226,53.362403],[-1.471269,53.362342],[-1.471191,53.362017]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":1394,"steep":false,"section":"Dore & Totley Station to Abbey Lane","segment_id":"sheaf3","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.508888,53.335898],[-1.509897,53.336097],[-1.510401,53.335678],[-1.512391,53.334124],[-1.512992,53.333618],[-1.513561,53.333176],[-1.514044,53.332644],[-1.51429,53.331991],[-1.514816,53.331433],[-1.515299,53.330805],[-1.515524,53.330248],[-1.515835,53.32905],[-1.516179,53.327781],[-1.515763,53.327767],[-1.515555,53.327611]]}},{"type":"Feature","properties":{"step_free":false,"cycleway":false,"proposed":false,"distance":429,"steep":false,"section":"Norton Hammer Woodland","segment_id":"sheaf4","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.487705,53.349631],[-1.487634,53.349759],[-1.487457,53.349821],[-1.487306,53.349783],[-1.487121,53.34984],[-1.486661,53.349932],[-1.486251,53.350414],[-1.485769,53.35086],[-1.485399,53.350966],[-1.485253,53.351083],[-1.485055,53.351031],[-1.484889,53.351166],[-1.484489,53.351295]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":1100,"steep":false,"section":"Sheffield Station to the Don Confluence","segment_id":"sheaf5","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.46318,53.378238],[-1.463142,53.378582],[-1.463378,53.3787],[-1.462713,53.379532],[-1.462487,53.379702],[-1.462297,53.379857],[-1.46198,53.380198],[-1.461787,53.380393],[-1.461468,53.380782],[-1.461404,53.380934],[-1.461337,53.381247],[-1.461189,53.381783],[-1.461087,53.382046],[-1.461141,53.382164],[-1.461133,53.382294],[-1.461186,53.382516],[-1.461189,53.382591],[-1.461498,53.382754],[-1.461425,53.382898],[-1.461524,53.383028],[-1.461404,53.383081],[-1.461345,53.383254],[-1.461315,53.383494],[-1.461337,53.383535],[-1.46131,53.383617],[-1.4612,53.383662],[-1.461186,53.383877],[-1.461245,53.38422],[-1.461318,53.38445],[-1.461409,53.384689],[-1.46151,53.384815],[-1.46166,53.385029],[-1.46186,53.385143],[-1.462367,53.385156],[-1.462328,53.385282]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":1975,"steep":false,"section":"Abbey Lane to Archer Road","segment_id":"sheaf6","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.495963,53.345229],[-1.496005,53.345172],[-1.496013,53.34504],[-1.496069,53.344826],[-1.496101,53.344722],[-1.496228,53.344587],[-1.496555,53.34435],[-1.496834,53.344203],[-1.497086,53.344152],[-1.497633,53.344187],[-1.497939,53.344071],[-1.498314,53.343719],[-1.498835,53.343258],[-1.498985,53.343149],[-1.49899,53.342816],[-1.499028,53.342714],[-1.499312,53.342396],[-1.500036,53.341884],[-1.500187,53.341782],[-1.500245,53.341676],[-1.500283,53.341593],[-1.500482,53.34149],[-1.500954,53.341391],[-1.501286,53.341247],[-1.501474,53.341032],[-1.501613,53.340779],[-1.501839,53.340597],[-1.502595,53.340161],[-1.502853,53.339879],[-1.50303,53.339751],[-1.503652,53.339508],[-1.50385,53.339226],[-1.504526,53.338934],[-1.504666,53.338828],[-1.505068,53.338438],[-1.505213,53.338284],[-1.505352,53.338082],[-1.505803,53.337858],[-1.506286,53.337685],[-1.506581,53.337547],[-1.506747,53.337486],[-1.507133,53.337429],[-1.507187,53.337365],[-1.507214,53.337214],[-1.507386,53.337105],[-1.507868,53.336984],[-1.508045,53.336903],[-1.508067,53.336772],[-1.508131,53.336615],[-1.508083,53.336487],[-1.50797,53.336333],[-1.507691,53.336199],[-1.507949,53.336071],[-1.508169,53.336013],[-1.508652,53.336048],[-1.508834,53.335984],[-1.508888,53.335898]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":503,"steep":false,"section":"Woodseats Road to Rydal Road","segment_id":"sheaf7","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.483639,53.354793],[-1.483676,53.354693],[-1.483636,53.354432],[-1.48352,53.354178],[-1.483221,53.353856],[-1.482922,53.352987],[-1.483137,53.352431],[-1.483699,53.35187],[-1.484122,53.351564],[-1.484559,53.351414],[-1.484489,53.351295]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":500,"steep":false,"section":"Archer Road to Moscar Wheel","segment_id":"sheaf8","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.494985,53.345945],[-1.494588,53.346262],[-1.494259,53.346544],[-1.494229,53.346617],[-1.493957,53.3468],[-1.493762,53.347266],[-1.493437,53.347366],[-1.493146,53.347587],[-1.492812,53.347832],[-1.492495,53.347795],[-1.49218,53.347832],[-1.491778,53.348054]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":607,"steep":false,"section":"Rydal Road to Broadfield Way","segment_id":"sheaf9","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.480027,53.357503],[-1.480011,53.35749],[-1.479831,53.357375],[-1.479627,53.357211],[-1.479558,53.357051],[-1.479643,53.356866],[-1.480486,53.356347],[-1.480813,53.356136],[-1.481054,53.35604],[-1.481671,53.355927],[-1.482706,53.35554],[-1.483087,53.355287],[-1.483415,53.355058],[-1.483639,53.354793]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":328,"steep":false,"section":"Moscar Wheel to Archer Road","segment_id":"sheaf10","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.491778,53.348054],[-1.491628,53.348229],[-1.491565,53.348424],[-1.491418,53.348428],[-1.491467,53.348633],[-1.491461,53.348752],[-1.49137,53.348938],[-1.491225,53.349066],[-1.491,53.3492],[-1.49078,53.349287],[-1.490517,53.349501],[-1.490533,53.349597],[-1.490227,53.349754],[-1.489841,53.350023],[-1.489544,53.350207]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":754,"steep":false,"section":"Broadfield Way to Saxon Road","segment_id":"sheaf11","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.475577,53.359691],[-1.475668,53.359712],[-1.476039,53.359737],[-1.476173,53.359833],[-1.476779,53.359888],[-1.478839,53.358835],[-1.479354,53.35861],[-1.47945,53.358505],[-1.479461,53.358409],[-1.479407,53.358284],[-1.47944,53.358172],[-1.479343,53.358098],[-1.479218,53.357952],[-1.479005,53.358082],[-1.478813,53.357975],[-1.47955,53.357778],[-1.479853,53.357724],[-1.47989,53.357624],[-1.47989,53.357557],[-1.480027,53.357503]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":506,"steep":false,"section":"Saxon Road to London Road","segment_id":"sheaf12","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.473064,53.362387],[-1.473164,53.362371],[-1.473255,53.362368],[-1.473356,53.362337],[-1.474284,53.362151],[-1.474263,53.362039],[-1.474681,53.360941],[-1.474419,53.360906],[-1.474483,53.360791],[-1.474708,53.36048],[-1.474853,53.360448],[-1.474928,53.360205],[-1.475566,53.3597]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":732,"steep":false,"section":"Granville Square to Sheffield Station","segment_id":"sheaf13","one_way":true,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.46318,53.378238],[-1.463695,53.378151],[-1.464273,53.377807],[-1.464453,53.377828],[-1.464686,53.377464],[-1.464777,53.376833],[-1.464321,53.37646],[-1.464165,53.376115],[-1.462786,53.37469],[-1.462652,53.374469],[-1.463387,53.374497],[-1.463504,53.37435]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":542,"steep":false,"section":"London Road to Myrtle Road","segment_id":"sheaf14","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.469652,53.365581],[-1.471613,53.364229],[-1.472037,53.363947],[-1.472192,53.363857],[-1.472343,53.363851],[-1.47253,53.363364],[-1.472777,53.363006],[-1.473061,53.362481],[-1.473064,53.362387]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":457,"steep":false,"section":"Myrtle Road to Charlotte Road","segment_id":"sheaf15","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.465523,53.369637],[-1.464866,53.369253],[-1.464777,53.369196],[-1.464769,53.36916],[-1.46481,53.369121],[-1.464942,53.369041],[-1.465244,53.368816],[-1.465058,53.368734],[-1.465235,53.368606],[-1.467061,53.367392]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":426,"steep":false,"section":"Charlotte Road to Duchess Road","segment_id":"sheaf16","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.465798,53.371408],[-1.466881,53.371498],[-1.467064,53.370582],[-1.466597,53.370266],[-1.465523,53.369637]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":372,"steep":false,"section":"Duchess Road to Granville Square","segment_id":"sheaf17","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.463504,53.37435],[-1.463498,53.374346],[-1.463169,53.374161],[-1.463341,53.374065],[-1.46333,53.373872],[-1.463684,53.373277],[-1.464693,53.372541],[-1.465218,53.37224],[-1.46522,53.372219]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":181,"steep":false,"section":"Abbey Lane to Archer Road","segment_id":"sheaf18","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.495887,53.345368],[-1.495825,53.3454],[-1.495637,53.345302],[-1.495287,53.345375],[-1.494828,53.345526],[-1.494564,53.345711],[-1.494985,53.345945]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":624,"steep":false,"section":"Norton Hammer Woodland","segment_id":"sheaf19","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.487705,53.349631],[-1.487113,53.348976],[-1.486912,53.348787],[-1.486058,53.34946],[-1.485285,53.349998],[-1.484942,53.350196],[-1.484406,53.350335],[-1.484942,53.351011],[-1.484487,53.351167],[-1.484489,53.351295]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":149,"steep":false,"section":"Abbey Lane to Archer Road","segment_id":"sheaf20","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.495963,53.345229],[-1.495776,53.345285],[-1.495646,53.345395],[-1.495487,53.345828],[-1.494985,53.345945]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":451,"steep":false,"section":"Moscar Wheel to Archer Road","segment_id":"sheaf21","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.491778,53.348054],[-1.491663,53.348595],[-1.491359,53.348608],[-1.49115,53.348719],[-1.49024,53.349289],[-1.489777,53.349549],[-1.489468,53.349545],[-1.489192,53.349404],[-1.488861,53.34965],[-1.48889,53.349755],[-1.489544,53.350207]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":717,"steep":false,"section":"Rydal Road to Broadfield Way","segment_id":"sheaf22","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.483639,53.354793],[-1.483852,53.354832],[-1.483613,53.355135],[-1.483341,53.355384],[-1.483395,53.355606],[-1.483726,53.35588],[-1.483914,53.356064],[-1.483892,53.356205],[-1.483594,53.356199],[-1.483307,53.356278],[-1.483125,53.356577],[-1.483037,53.356877],[-1.482932,53.356958],[-1.482554,53.357065],[-1.482142,53.357115],[-1.481447,53.357313],[-1.481302,53.357329],[-1.480879,53.35749],[-1.480643,53.357596],[-1.480027,53.357503]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":193,"steep":false,"section":"London Road to Myrtle Road","segment_id":"sheaf23","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.473064,53.362387],[-1.472665,53.362287],[-1.47198,53.362404],[-1.471496,53.362512],[-1.471371,53.362557]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":367,"steep":false,"section":"Myrtle Road to Charlotte Road","segment_id":"sheaf24","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.468685,53.364879],[-1.468443,53.365111],[-1.468396,53.365439],[-1.467781,53.365678],[-1.467481,53.365866],[-1.4667,53.366268],[-1.467078,53.36637],[-1.467326,53.366335],[-1.467351,53.366422],[-1.467332,53.366838],[-1.467261,53.36712],[-1.467061,53.367392]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":325,"steep":false,"section":"Myrtle Road to Charlotte Road","segment_id":"sheaf25","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.467061,53.367392],[-1.466927,53.367687],[-1.466927,53.367899],[-1.466284,53.368455],[-1.46602,53.368733],[-1.465701,53.36896],[-1.465511,53.369161],[-1.465487,53.369406],[-1.465523,53.369637]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":true,"distance":233,"steep":false,"section":"Charlotte Road to Duchess Road","segment_id":"sheaf26","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.465523,53.369637],[-1.465637,53.370044],[-1.465497,53.370392],[-1.465319,53.370711],[-1.465497,53.371178],[-1.465627,53.371402],[-1.465798,53.371408],[-1.465798,53.371408]]}},{"type":"Feature","properties":{"step_free":false,"cycleway":false,"proposed":false,"distance":52,"steep":false,"section":"Abbey Lane to Archer Road","segment_id":"sheaf28","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.495963,53.345229],[-1.495966,53.345315],[-1.495887,53.345368]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":false,"proposed":false,"distance":283,"steep":false,"section":"Moscar Wheel to Archer Road","segment_id":"sheaf29","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.489544,53.350207],[-1.488629,53.350772],[-1.487705,53.349631],[-1.487705,53.349631]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":260,"steep":false,"section":"London Road to Myrtle Road","segment_id":"sheaf31","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.471191,53.362017],[-1.473026,53.361889],[-1.473064,53.362387]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":133,"steep":false,"section":"London Road to Myrtle Road","segment_id":"sheaf32","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.468685,53.364879],[-1.469652,53.365581]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":352,"steep":false,"section":"Myrtle Road to Charlotte Road","segment_id":"sheaf33","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.467061,53.367392],[-1.467461,53.36711],[-1.469387,53.365768],[-1.469652,53.365581]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":137,"steep":false,"section":"Charlotte Road to Duchess Road","segment_id":"sheaf34","one_way":false,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.46522,53.372219],[-1.465281,53.372177],[-1.465418,53.372232],[-1.465519,53.37217],[-1.465712,53.371959],[-1.465873,53.371715],[-1.465798,53.371408]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":null,"steep":false,"section":"Moscar Wheel to Archer Road","segment_id":"sheaf37","one_way":false,"on_road":true,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.491778,53.348054],[-1.491549,53.348265],[-1.491511,53.34843],[-1.491534,53.348571],[-1.491507,53.348783],[-1.491372,53.34901],[-1.491165,53.349151],[-1.490886,53.349325],[-1.490769,53.349408],[-1.490622,53.349619],[-1.49046,53.349801],[-1.490049,53.349981],[-1.488708,53.350845],[-1.487705,53.349631]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":null,"steep":false,"section":"Broadfield Way to Saxon Road","segment_id":"sheaf36","one_way":false,"on_road":false,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.480027,53.357503],[-1.47989,53.357557],[-1.479929,53.35763],[-1.479911,53.3577],[-1.47922,53.357807],[-1.478791,53.357948],[-1.478279,53.357699],[-1.477979,53.357869],[-1.477854,53.357872],[-1.476549,53.358732],[-1.476083,53.359077],[-1.475834,53.359399],[-1.47577,53.359435],[-1.47575,53.359545],[-1.475577,53.359691]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":null,"steep":false,"section":"Granville Square to Sheffield Station","segment_id":"sheaf35","one_way":true,"on_road":false,"walking_default":true},"geometry":{"type":"LineString","coordinates":[[-1.463504,53.37435],[-1.463427,53.374485],[-1.463505,53.374639],[-1.464295,53.375425],[-1.463045,53.375845],[-1.46312,53.377129],[-1.46313,53.377206],[-1.463413,53.377471],[-1.463483,53.377513],[-1.463469,53.377702],[-1.463413,53.377725],[-1.463179,53.377721],[-1.463116,53.377759],[-1.463102,53.37793],[-1.46298,53.378026],[-1.462969,53.378168],[-1.46318,53.378238]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":null,"steep":false,"section":"Dore & Totley Station to Abbey Lane","segment_id":"sheaf38","one_way":false,"on_road":true,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.515555,53.327611],[-1.515908,53.327789],[-1.515791,53.328637],[-1.515988,53.328701],[-1.515835,53.329525],[-1.515826,53.329703],[-1.515559,53.330556],[-1.515176,53.331182],[-1.514442,53.332115],[-1.514334,53.332384],[-1.513978,53.33297],[-1.512561,53.334093],[-1.511331,53.335132],[-1.510173,53.336015],[-1.509978,53.336113],[-1.508888,53.335898]]}},{"type":"Feature","properties":{"step_free":true,"cycleway":true,"proposed":false,"distance":null,"steep":false,"section":"Saxon Road to London Road","segment_id":"sheaf39","one_way":false,"on_road":true,"walking_default":false},"geometry":{"type":"LineString","coordinates":[[-1.475577,53.359691],[-1.474928,53.360205],[-1.474853,53.360448],[-1.474681,53.360941],[-1.47435,53.362027],[-1.474336,53.362191],[-1.473095,53.362414],[-1.473064,53.362387]]}}]};
+
+// Projects — segment_id OR lat/lon for point projects
+const PROJECTS = [
+  {
+    "project_id": "project1",
+    "segment_id": "sheaf5",
+    "lat": null,
+    "lon": null,
+    "title": "Signage",
+    "description": "The Sheaf Confluence to Granville Square: signage along the underground route",
+    "image_url": null,
+    "image2_url": null,
+    "link": null,
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": "https://www.sheafportertrust.org/donate",
+    "url_volunteer": "mailto:info@sheafportertrust.org?subject=Volunteering&body=Please%20can%20you%20give%20me%20some%20more%20information%20about%20volunteering%20for%20the%20Sheaf%20and%20Porter%20Rivers%20Trust%3F"
+  },
+  {
+    "project_id": "project2",
+    "segment_id": "sheaf26",
+    "lat": 53.371285,
+    "lon": -1.4657181,
+    "title": "Rowsley Street to Edmund Court",
+    "description": "Edmund Court contains a safe guarded section of River Sheaf Walk. Joining this up will be difficult and expensive.",
+    "image_url": null,
+    "image2_url": null,
+    "link": null,
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project3",
+    "segment_id": "sheaf26",
+    "lat": 53.3702396,
+    "lon": -1.4655742,
+    "title": "Bridge to Priestley House (formerly Royal Riverside)",
+    "description": "The developer here was due to provide a section of River Sheaf Walk. The council need to undertake enforcement to make this happen.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_6cf7487353094177ae461c5e897d19ea~mv2.png/v1/fill/w_519,h_600,al_c,q_85,enc_avif,quality_auto/image.png",
+    "image2_url": null,
+    "link": null,
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project4",
+    "segment_id": "sheaf25",
+    "lat": null,
+    "lon": null,
+    "title": "KFC to Queens Road Bridge",
+    "description": "A very difficult section to deliver. The River Sheaf lives in a narrow gorge and the area is highly developed already. Several regeneration projects will be needed to unlock this part of the Sheaf. Highfield has very little greenspace and this would provide a linear green & bluespace for residents once built.\n\nUnbuilt apartments at the corner of Edmund Road and Queens Road back in 2009 (09/02216/OUT) planned for the riverside walk to continue down the west bank. There is an existing, yet derelict bridge further downstream, so perhaps the council team leading this in the early 2000s had plans to bypass the houses and connect up the sections as commercial sites had been redeveloped.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_94b76dadc80a44f48ae2e846a5b6dc4f~mv2.jpg/v1/fill/w_528,h_600,al_c,q_80,enc_avif,quality_auto/f2e522_94b76dadc80a44f48ae2e846a5b6dc4f~mv2.jpg",
+    "image2_url": null,
+    "link": null,
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project5",
+    "segment_id": "sheaf24",
+    "lat": null,
+    "lon": null,
+    "title": "Queens Road Costa Coffee to Myrtle Road",
+    "description": "A developer is in the processing of providing this link, enabling us to unlock the hidden riverside walk behind Travis Perkins and Big Yellow Box Storage.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_2e96447326224f44a05f34023622e5de~mv2.jpg/v1/fill/w_528,h_600,al_c,q_80,enc_avif,quality_auto/f2e522_2e96447326224f44a05f34023622e5de~mv2.jpg",
+    "image2_url": null,
+    "link": "https://www.sheafportertrust.org/post/costa-coffee-queens-road-1",
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project6",
+    "segment_id": "sheaf23",
+    "lat": null,
+    "lon": null,
+    "title": "Sheaf Bank to Heeley Bridge",
+    "description": "A Spider Web bridge of Five Weirs Walk style to take the route under the very large railway arch.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_ebcc372191c84c46b656571d6a23cc2b~mv2.png/v1/fill/w_387,h_290,al_c,q_85,enc_avif,quality_auto/f2e522_ebcc372191c84c46b656571d6a23cc2b~mv2.png",
+    "image2_url": null,
+    "link": null,
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project7",
+    "segment_id": "sheaf22",
+    "lat": null,
+    "lon": null,
+    "title": "Broadfield Park back to Little London Road.",
+    "description": "We are trying to convince Laver Regeneration Limited to allow a 20m footpath to allow this to happen.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_877bab9bea3048b68e69105c23f73332~mv2.png/v1/fill/w_600,h_428,al_c,q_85,enc_avif,quality_auto/image.png",
+    "image2_url": null,
+    "link": "https://www.sheafportertrust.org/post/little-london-road-the-dead-end-riverside-walk-the-former-lavers-yard",
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": "mailto:info@laverregen.com?subject=Request%20for%20a%20permissive%20path%20along%20the%20River%20Sheaf%20%E2%80%94%20Little%20London%20Road&body=Dear%20Laver%20Regeneration%20Limited%2C%0A%0AI%20am%20writing%20as%20a%20local%20resident%20to%20ask%20whether%20you%20would%20consider%20granting%20a%20permissive%20path%20across%20your%20land%20at%20the%20former%20Arnold%20Lavers%20yard%20on%20Little%20London%20Road%2C%20to%20close%20a%20short%20but%20important%20gap%20in%20the%20River%20Sheaf%20Walk.%0A%0AThe%20existing%20riverside%20walk%20currently%20ends%20at%20a%20dead%20end%20near%20Broadfield%2C%20with%20only%20around%2020%20metres%20of%20your%20land%20separating%20it%20from%20Little%20London%20Road.%20This%20small%20connection%20would%20complete%20a%20meaningful%20stretch%20of%20riverside%20route%20through%20Sheffield%2C%20providing%20a%20safe%20and%20pleasant%20walking%20link%20for%20local%20people%20and%20visitors%20alike.%0A%0AI%20understand%20that%20during%20the%20recent%20planning%20process%20for%20the%20Tekkers%20football%20centre%20(application%2023%2F01868%2FFUL)%2C%20the%20applicant%20was%20themselves%20supportive%20of%20providing%20this%20link%2C%20and%20that%20Sheffield%20City%20Council%2C%20local%20councillors%2C%20and%20community%20groups%20were%20also%20in%20favour.%20It%20is%20disappointing%20that%20such%20a%20modest%20connection%20remains%20undelivered.%0A%0AI%20appreciate%20that%20granting%20public%20access%20to%20private%20land%20is%20not%20a%20decision%20to%20take%20lightly.%20A%20permissive%20path%20agreement%20need%20not%20mean%20any%20permanent%20dedication%20of%20the%20land%20as%20public%20highway%20%E2%80%94%20it%20would%20simply%20allow%20walkers%20to%20use%20a%20defined%20route%20at%20your%20discretion%2C%20and%20could%20be%20structured%20with%20whatever%20conditions%20and%20safeguards%20you%20feel%20are%20appropriate.%0A%0AI%20hope%20you%20will%20give%20this%20request%20your%20consideration.%20A%20short%20stretch%20of%20riverside%20path%20here%20would%20make%20a%20real%20difference%20to%20the%20community%20and%20to%20Sheffield%27s%20green%20infrastructure%2C%20and%20I%20believe%20it%20could%20be%20achieved%20with%20minimal%20impact%20on%20your%20land%20and%20operations.%0A%0AYours%20sincerely%2C%0A%5BYour%20name%5D%0A%5BYour%20address%5D%0A%5BOptional%3A%20your%20email%20%2F%20phone%5D",
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": "mailto:info@sheafportertrust.org?subject=Volunteering&body=Please can you give me some more information about volunteering for the Sheaf and Porter Rivers Trust?"
+  },
+  {
+    "project_id": "project8",
+    "segment_id": "sheaf21",
+    "lat": null,
+    "lon": null,
+    "title": "Troutbeck Road to Tesco",
+    "description": "Enforcement action ongoing to allow this to happen.\nPart of this River Sheaf Walk already exists - and Tesco built a section of the Riverside Walk under their access bridge, ready for a connection.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_c228d53b8eff48cd93f14093a15d1c03~mv2.png/v1/fill/w_772,h_308,al_c,lg_1,q_85,enc_avif,quality_auto/image.png",
+    "image2_url": "https://static.wixstatic.com/media/f2e522_e4464d4d167a4c9c8f31a3240de54da1~mv2.png/v1/fill/w_217,h_386,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/image.png",
+    "link": "https://www.sheafportertrust.org/post/river-sheaf-walk-troutbeck-road-planning-application-objections",
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": "https://www.sheafportertrust.org/donate",
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project9",
+    "segment_id": "sheaf20",
+    "lat": null,
+    "lon": null,
+    "title": "Under Archer Road, directly into Millhouses Park",
+    "description": null,
+    "image_url": null,
+    "image2_url": null,
+    "link": null,
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": "https://www.sheafportertrust.org/donate",
+    "url_volunteer": null
+  },
+  {
+    "project_id": "project10",
+    "segment_id": null,
+    "lat": 53.3769651,
+    "lon": -1.4621598,
+    "title": "Sheffield Station Lightwell",
+    "description": "The ‘Lightwells’ project, which started in June 2019, will reveal a glimpse of the hidden rivers, Sheaf and Porter, flowing beneath Sheffield Station platform five via a new stainless steel grille, surrounded by sitting or leaning ‘perches’.",
+    "image_url": "https://static.wixstatic.com/media/f2e522_055b92aeab4245cbb3c90ab33cb180a2~mv2.jpg/v1/fill/w_600,h_390,al_c,q_80,usm_0.66_1.00_0.01,enc_avif,quality_auto/Model%20view%20Mantz%20Yorke%20and%20Samuel%20Charle.jpg",
+    "image2_url": null,
+    "link": "https://www.sheafportertrust.org/sheffield-station-lightwell-project",
+    "url_join": "https://www.sheafportertrust.org/contact",
+    "url_landowner": null,
+    "url_councillor": null,
+    "url_share": null,
+    "url_donate": null,
+    "url_volunteer": null
+  }
+];
+
+// ── SECTION ORDER ─────────────────────────────────────────────────────────────
+
+const POIS = [
+  {name:"Waggon & Horses",                      layer:"Refreshments & Facilities", lng:-1.500825, lat:53.342871},
+  {name:"Dore & Totley",                        layer:"Refreshments & Facilities", lng:-1.515482, lat:53.327602},
+  {name:"Sheffield Station",                    layer:"Refreshments & Facilities", lng:-1.462937, lat:53.378268},
+  {name:"Tesco Cafe",                           layer:"Refreshments & Facilities", lng:-1.493258, lat:53.347023},
+  {name:"The Climbing Works - Cafe & Climbing", layer:"Refreshments & Facilities", lng:-1.484826, lat:53.351640},
+  {name:"Hardy Pick",                           layer:"Refreshments & Facilities", lng:-1.480142, lat:53.356865},
+  {name:"Sheaf View",                           layer:"Refreshments & Facilities", lng:-1.470953, lat:53.362125},
+  {name:"The Royal Standard",                   layer:"Refreshments & Facilities", lng:-1.465076, lat:53.374124},
+  {name:"Sheffield Tap",                        layer:"Refreshments & Facilities", lng:-1.462718, lat:53.378813},
+  {name:"Granville Square Wheel",               layer:"Sheaf Wheels",              lng:-1.463166, lat:53.374178},
+  {name:"Duchess Road Wheel",                   layer:"Sheaf Wheels",              lng:-1.465292, lat:53.372201},
+  {name:"Queens Road Wheel",                    layer:"Sheaf Wheels",              lng:-1.467095, lat:53.367344},
+  {name:"Cutler's Walk Wheel",                  layer:"Sheaf Wheels",              lng:-1.471340, lat:53.362455},
+  {name:"Heeley Bridge Wheel",                  layer:"Sheaf Wheels",              lng:-1.473014, lat:53.362256},
+  {name:"Saxon Road Wheel",                     layer:"Sheaf Wheels",              lng:-1.474736, lat:53.360456},
+  {name:"Heeley Baths Wheel",                   layer:"Sheaf Wheels",              lng:-1.479393, lat:53.358534},
+  {name:"Norton Hammer Wheel",                  layer:"Sheaf Wheels",              lng:-1.484067, lat:53.351646},
+  {name:"Millhouses Park Wheel",                layer:"Sheaf Wheels",              lng:-1.500807, lat:53.341403},
+];
+
+
+const WATERSHED = {"type":"FeatureCollection","name":"watershed_sheaf","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":[{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[-1.57453,53.30512],[-1.56902,53.30194],[-1.56891,53.3012],[-1.56912,53.30079],[-1.56617,53.29898],[-1.56326,53.29887],[-1.56123,53.29843],[-1.55974,53.2984],[-1.55691,53.29803],[-1.55601,53.29767],[-1.55584,53.29699],[-1.55539,53.2967],[-1.55371,53.29649],[-1.5524,53.29584],[-1.5521,53.29631],[-1.5512,53.29691],[-1.5508,53.297],[-1.54816,53.29674],[-1.54673,53.2962],[-1.5455,53.29531],[-1.54434,53.29475],[-1.54378,53.29374],[-1.54294,53.29365],[-1.5424,53.29343],[-1.54128,53.2935],[-1.54075,53.29367],[-1.54038,53.29427],[-1.53984,53.2945],[-1.53923,53.29522],[-1.53907,53.29622],[-1.53824,53.29591],[-1.53512,53.2957],[-1.53431,53.29538],[-1.53037,53.29532],[-1.52936,53.29498],[-1.52852,53.29496],[-1.52722,53.29463],[-1.52336,53.29487],[-1.52287,53.29519],[-1.52282,53.29542],[-1.52222,53.29563],[-1.52123,53.29556],[-1.52075,53.29523],[-1.51958,53.2953],[-1.51922,53.29555],[-1.51837,53.29574],[-1.5146,53.29811],[-1.51417,53.29901],[-1.51427,53.30019],[-1.51466,53.30048],[-1.51453,53.30237],[-1.51586,53.3033],[-1.51597,53.30404],[-1.51579,53.30425],[-1.51497,53.30447],[-1.514,53.30556],[-1.51225,53.30615],[-1.51207,53.30645],[-1.5115,53.30674],[-1.51131,53.30711],[-1.50989,53.30811],[-1.51069,53.30905],[-1.51101,53.30981],[-1.51215,53.31037],[-1.51226,53.31068],[-1.50948,53.31153],[-1.50914,53.3119],[-1.50813,53.31215],[-1.50741,53.31272],[-1.50776,53.31341],[-1.5078,53.31517],[-1.50833,53.3156],[-1.50916,53.31581],[-1.51022,53.31568],[-1.51114,53.31691],[-1.50986,53.31725],[-1.50671,53.31745],[-1.5063,53.31754],[-1.50588,53.31788],[-1.50303,53.31842],[-1.50318,53.31866],[-1.50301,53.31914],[-1.50358,53.31936],[-1.5036,53.31955],[-1.50266,53.32038],[-1.5035,53.32112],[-1.50361,53.32164],[-1.50231,53.32248],[-1.50194,53.32298],[-1.50048,53.32359],[-1.49863,53.32292],[-1.49768,53.32307],[-1.49625,53.32366],[-1.49433,53.32345],[-1.49302,53.3239],[-1.4928,53.3242],[-1.49202,53.32456],[-1.49021,53.32502],[-1.48978,53.32554],[-1.48951,53.32561],[-1.48873,53.32554],[-1.48797,53.32521],[-1.48696,53.32537],[-1.48566,53.32671],[-1.48399,53.32656],[-1.48342,53.32625],[-1.48206,53.32617],[-1.4807,53.3265],[-1.48011,53.32687],[-1.47875,53.32688],[-1.47829,53.32743],[-1.47754,53.32734],[-1.47774,53.32804],[-1.47664,53.32827],[-1.47655,53.32853],[-1.47465,53.3283],[-1.47455,53.32869],[-1.47419,53.32896],[-1.47316,53.32903],[-1.47254,53.32989],[-1.47312,53.33041],[-1.46697,53.3313],[-1.46601,53.3318],[-1.46477,53.33192],[-1.46394,53.33219],[-1.46343,53.33289],[-1.46398,53.33327],[-1.46386,53.33359],[-1.46352,53.33386],[-1.46229,53.33426],[-1.4621,53.33452],[-1.46225,53.33531],[-1.46068,53.33561],[-1.46041,53.33579],[-1.45982,53.33691],[-1.45624,53.33745],[-1.45503,53.33781],[-1.45465,53.33822],[-1.45239,53.33799],[-1.45063,53.33811],[-1.44984,53.33789],[-1.44874,53.33819],[-1.44821,53.33816],[-1.44691,53.33878],[-1.44673,53.33918],[-1.44567,53.33947],[-1.44522,53.3398],[-1.44377,53.34011],[-1.44317,53.34043],[-1.44214,53.34059],[-1.44096,53.34048],[-1.43957,53.34184],[-1.4384,53.34233],[-1.43812,53.34264],[-1.43818,53.34307],[-1.43705,53.34296],[-1.43612,53.34317],[-1.43502,53.34316],[-1.43064,53.34302],[-1.43002,53.34309],[-1.42951,53.34334],[-1.43036,53.34379],[-1.42993,53.34433],[-1.42829,53.34518],[-1.42802,53.34574],[-1.42924,53.34644],[-1.43041,53.3465],[-1.43122,53.34687],[-1.43348,53.34805],[-1.43437,53.3489],[-1.43448,53.34994],[-1.43396,53.35072],[-1.43431,53.35143],[-1.43424,53.35225],[-1.43492,53.35276],[-1.43592,53.35448],[-1.43571,53.35465],[-1.43577,53.35497],[-1.43496,53.3557],[-1.4353,53.35613],[-1.43494,53.35625],[-1.43457,53.35673],[-1.43398,53.35694],[-1.43398,53.35721],[-1.43522,53.35776],[-1.43554,53.35828],[-1.43727,53.35833],[-1.43776,53.35842],[-1.43821,53.35873],[-1.43819,53.35896],[-1.43771,53.35919],[-1.43746,53.35967],[-1.43824,53.36106],[-1.43769,53.36165],[-1.4375,53.36232],[-1.43693,53.36264],[-1.43628,53.36356],[-1.43571,53.36398],[-1.43558,53.3648],[-1.43605,53.36514],[-1.43648,53.36706],[-1.43887,53.36795],[-1.43925,53.3691],[-1.4401,53.37014],[-1.4405,53.37179],[-1.43968,53.37287],[-1.44004,53.37301],[-1.44039,53.3735],[-1.44111,53.37354],[-1.44141,53.3737],[-1.44197,53.37424],[-1.44191,53.37455],[-1.44233,53.37486],[-1.44421,53.37542],[-1.44505,53.37586],[-1.44628,53.37606],[-1.4467,53.37646],[-1.44852,53.37737],[-1.44882,53.37735],[-1.45003,53.37655],[-1.45084,53.37667],[-1.45294,53.37593],[-1.45367,53.37618],[-1.45508,53.37705],[-1.45557,53.37693],[-1.45646,53.37702],[-1.45697,53.37736],[-1.45876,53.37774],[-1.45903,53.37817],[-1.45836,53.37851],[-1.45827,53.37905],[-1.45874,53.37953],[-1.45909,53.38047],[-1.4596,53.3809],[-1.45956,53.38137],[-1.45992,53.38166],[-1.45979,53.38204],[-1.45884,53.38259],[-1.45954,53.38292],[-1.4599,53.38292],[-1.45995,53.38353],[-1.46109,53.38397],[-1.46139,53.3844],[-1.46142,53.38507],[-1.46303,53.38502],[-1.46397,53.38448],[-1.46416,53.38359],[-1.46453,53.38315],[-1.46797,53.38312],[-1.46843,53.38292],[-1.4691,53.38305],[-1.46987,53.38259],[-1.47019,53.38275],[-1.47076,53.38277],[-1.47221,53.38216],[-1.47276,53.38166],[-1.4741,53.38112],[-1.4741,53.38094],[-1.47358,53.38034],[-1.47206,53.37988],[-1.47141,53.37991],[-1.46897,53.37933],[-1.46845,53.37943],[-1.46848,53.37974],[-1.46822,53.37981],[-1.46641,53.37968],[-1.4665,53.37924],[-1.467,53.37903],[-1.46557,53.37813],[-1.46348,53.37774],[-1.46304,53.37741],[-1.46294,53.37666],[-1.46423,53.37582],[-1.46444,53.37551],[-1.46572,53.37484],[-1.4665,53.37495],[-1.46723,53.37424],[-1.46717,53.374],[-1.46838,53.37328],[-1.47025,53.37261],[-1.47186,53.37114],[-1.47281,53.37091],[-1.47331,53.37059],[-1.47365,53.37007],[-1.47423,53.36977],[-1.47587,53.36825],[-1.47584,53.36773],[-1.47607,53.36757],[-1.47726,53.36746],[-1.47751,53.36702],[-1.47883,53.36685],[-1.4801,53.36626],[-1.48039,53.36726],[-1.48268,53.36704],[-1.48322,53.36679],[-1.48385,53.36672],[-1.48406,53.36685],[-1.48586,53.36689],[-1.48649,53.36723],[-1.48799,53.36748],[-1.48826,53.3673],[-1.48865,53.3673],[-1.48981,53.36621],[-1.49032,53.36632],[-1.49216,53.36591],[-1.49228,53.3656],[-1.49207,53.36532],[-1.49271,53.36485],[-1.49411,53.36471],[-1.49417,53.36453],[-1.49546,53.36391],[-1.49567,53.36361],[-1.4963,53.36348],[-1.49676,53.36316],[-1.49787,53.36297],[-1.49827,53.36272],[-1.49878,53.36265],[-1.49979,53.36314],[-1.5003,53.3631],[-1.50121,53.36366],[-1.50162,53.36361],[-1.50259,53.3632],[-1.50313,53.36317],[-1.50328,53.36286],[-1.50307,53.36264],[-1.50335,53.36238],[-1.50416,53.36235],[-1.50458,53.36197],[-1.5051,53.36199],[-1.50615,53.36164],[-1.50643,53.36116],[-1.50521,53.35968],[-1.50533,53.35951],[-1.50624,53.35916],[-1.50723,53.35905],[-1.50814,53.35851],[-1.50854,53.35803],[-1.51069,53.35748],[-1.51326,53.35775],[-1.51454,53.35852],[-1.51806,53.35823],[-1.52064,53.35873],[-1.52139,53.35848],[-1.52167,53.35782],[-1.52243,53.35755],[-1.52267,53.35689],[-1.52319,53.3566],[-1.52311,53.35547],[-1.52364,53.35604],[-1.52643,53.35557],[-1.5271,53.3557],[-1.5278,53.35529],[-1.52893,53.35493],[-1.52982,53.35483],[-1.53069,53.3544],[-1.53122,53.35433],[-1.53234,53.35455],[-1.53322,53.35407],[-1.53385,53.35405],[-1.53413,53.35355],[-1.5347,53.35325],[-1.53555,53.35305],[-1.53657,53.35246],[-1.53711,53.3525],[-1.53781,53.35227],[-1.53786,53.35198],[-1.53845,53.35143],[-1.53864,53.35048],[-1.54272,53.34806],[-1.5438,53.34787],[-1.54438,53.34753],[-1.54561,53.34743],[-1.54621,53.3472],[-1.54698,53.34727],[-1.54897,53.34791],[-1.55006,53.3486],[-1.55091,53.34881],[-1.55145,53.34916],[-1.55266,53.34952],[-1.555,53.34989],[-1.55939,53.35007],[-1.56059,53.34986],[-1.56214,53.3499],[-1.56435,53.34969],[-1.56603,53.34993],[-1.56852,53.35001],[-1.56956,53.3496],[-1.57066,53.34944],[-1.57518,53.35007],[-1.57574,53.35042],[-1.57656,53.35051],[-1.58172,53.3506],[-1.58523,53.35027],[-1.58657,53.34986],[-1.59387,53.34958],[-1.59448,53.34897],[-1.59448,53.34868],[-1.59362,53.34775],[-1.59303,53.34743],[-1.59202,53.34774],[-1.5924,53.34584],[-1.59214,53.34539],[-1.59127,53.34488],[-1.59117,53.34329],[-1.59129,53.34243],[-1.5919,53.34154],[-1.59399,53.34038],[-1.59427,53.33888],[-1.59343,53.33852],[-1.59263,53.33748],[-1.59117,53.33664],[-1.59024,53.33619],[-1.58865,53.33597],[-1.58824,53.33539],[-1.58831,53.3342],[-1.58795,53.33366],[-1.58849,53.3312],[-1.58833,53.33041],[-1.58898,53.33024],[-1.58925,53.32979],[-1.58923,53.32866],[-1.58873,53.32844],[-1.58831,53.32759],[-1.5888,53.32067],[-1.58895,53.32037],[-1.58931,53.32021],[-1.58933,53.31981],[-1.5891,53.31752],[-1.58838,53.31622],[-1.58808,53.31622],[-1.58762,53.31587],[-1.58573,53.31552],[-1.58413,53.31647],[-1.58276,53.31653],[-1.58227,53.31646],[-1.58074,53.31554],[-1.58001,53.31423],[-1.57996,53.31232],[-1.5797,53.31192],[-1.57778,53.31123],[-1.57732,53.30999],[-1.57633,53.30961],[-1.57565,53.309],[-1.57496,53.30879],[-1.57364,53.30798],[-1.57386,53.30758],[-1.57366,53.30614],[-1.57394,53.30561],[-1.57453,53.30512]]]}}]};
+const SECTION_ORDER = [
+  "Dore & Totley Station to Abbey Lane","Abbey Lane to Archer Road",
+  "Archer Road to Moscar Wheel","Moscar Wheel to Archer Road",
+  "Norton Hammer Woodland","Woodseats Road to Rydal Road",
+  "Rydal Road to Broadfield Way","Broadfield Way to Saxon Road",
+  "Saxon Road to London Road","London Road to Myrtle Road",
+  "Myrtle Road to Charlotte Road","Charlotte Road to Duchess Road",
+  "Duchess Road to Granville Square","Granville Square to Sheffield Station",
+  "Sheffield Station to the Don Confluence"
+];
+
+const sectionMap = {};
+GEOJSON.features.forEach(f => {
+  const s = f.properties.section;
+  if (!sectionMap[s]) sectionMap[s] = [];
+  sectionMap[s].push(f);
+});
+const sections = SECTION_ORDER.filter(s => sectionMap[s]);
+
+// Index projects by section (via segment)
+const segmentSection = {};
+GEOJSON.features.forEach(f => { segmentSection[f.properties.segment_id] = f.properties.section; });
+
+// ── LAYER DEFINITIONS ─────────────────────────────────────────────────────────
+// Each layer: which segments it shows, offset, colour
+const LAYERS = {
+  walk:     { color:'#E07820', offset: 0,   filter: p => !p.proposed && p.walking_default },
+  stepfree: { color:'#C0392B', offset: 4,   filter: p => !p.proposed && !p.on_road && p.step_free },
+  cycle:    { color:'#1A9E6E', offset:-4,   filter: p => !p.proposed && p.cycleway },
+};
+const VISION_COLOR = '#9B59B6';
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let activeLayers  = new Set(['walk']);
+let visionOn      = false;
+let activeSection = null;
+let activeProject = null;
+let mapReady      = false;
+let projectMarkers = [];
+let poiMarkers     = [];
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: `https://api.maptiler.com/maps/dataviz/style.json?key=${MAPTILER_KEY}`,
+  center: [-1.50993, 53.34640],
+  zoom: 13,
+  pitch: 55, bearing: -25, antialias: true,
+  maxZoom: 17,
+});
+
+map.addControl(new maplibregl.NavigationControl({ visualizePitch:true }), 'bottom-right');
+
+map.on('load', () => {
+  // Terrain
+  try {
+    map.addSource('terrain', { type:'raster-dem', url:`https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`, tileSize:256 });
+    map.setTerrain({ source:'terrain', exaggeration:2.0 });
+  } catch(e) {}
+
+  // Suppress POI icons at low zoom
+  map.getStyle().layers.forEach(layer => {
+    if (layer.type !== 'symbol') return;
+    const id = layer.id || '';
+    if (id.match(/poi|amenity|shop|tourism|leisure|sport|office|craft|emergency/)) {
+      try { map.setLayoutProperty(id, 'visibility', 'none'); } catch(e) {}
+    }
+  });
+
+  // Subtle river boost — just a nudge darker than dataviz defaults
+  try {
+    map.setPaintProperty('River', 'line-color', '#6aabcc');
+    map.setPaintProperty('River', 'line-opacity', 0.9);
+  } catch(e) {}
+  try {
+    map.setPaintProperty('Water', 'fill-color', '#8ec8e0');
+    map.setPaintProperty('Water', 'fill-opacity', 0.95);
+  } catch(e) {}
+  try {
+    map.setPaintProperty('Water shadow', 'fill-color', '#6aabcc');
+    map.setPaintProperty('Water shadow', 'fill-opacity', 0.3);
+  } catch(e) {}
+
+  // Watershed polygon — subtle fill, visible only at low zoom
+  map.addSource('watershed', { type:'geojson', data:WATERSHED });
+
+  // Fill — fades out as you zoom in
+  map.addLayer({
+    id:'watershed-fill', type:'fill', source:'watershed',
+    paint:{
+      'fill-color':'#4a9a8a',
+      'fill-opacity':['interpolate',['linear'],['zoom'], 10,0.15, 12,0.1, 13.5,0]
+    }
+  }, 'Forest');
+
+  // Border — slightly more visible than fill, also fades
+  map.addLayer({
+    id:'watershed-line', type:'line', source:'watershed',
+    paint:{
+      'line-color':'#2a7a6a',
+      'line-width':1.8,
+      'line-opacity':['interpolate',['linear'],['zoom'], 10,0.55, 12,0.35, 13.5,0],
+      'line-dasharray':[4,3]
+    }
+  }, 'Forest');
+
+    // Add one source per segment, three line layers per segment (one per route layer) + vision
+  GEOJSON.features.forEach(f => {
+    const sid = f.properties.segment_id;
+    map.addSource(`seg-${sid}`, { type:'geojson', data:f });
+
+    // Walk, stepfree, cycle layers
+    Object.entries(LAYERS).forEach(([key, cfg]) => {
+      // Casing — white line drawn FIRST (below), wider than main line
+      map.addLayer({ id:`${sid}-${key}-glow`, type:'line', source:`seg-${sid}`,
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{ 'line-color':'#ffffff', 'line-width':8, 'line-opacity':0,
+                'line-offset':['interpolate',['linear'],['zoom'],10,cfg.offset*0.5,15,cfg.offset] }
+      });
+      // Main coloured line — drawn SECOND (on top of casing)
+      map.addLayer({ id:`${sid}-${key}`, type:'line', source:`seg-${sid}`,
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{ 'line-color':cfg.color, 'line-width':3, 'line-opacity':0,
+                'line-offset':['interpolate',['linear'],['zoom'],10,cfg.offset*0.5,15,cfg.offset] }
+      });
+      map.on('click', `${sid}-${key}`, e => { e.originalEvent.stopPropagation(); selectSection(f.properties.section); });
+      map.on('mouseenter', `${sid}-${key}`, () => { map.getCanvas().style.cursor='pointer'; });
+      map.on('mouseleave', `${sid}-${key}`, () => { map.getCanvas().style.cursor=''; });
+    });
+
+    // Vision layer (proposed segments)
+    map.addLayer({ id:`${sid}-vision`, type:'line', source:`seg-${sid}`,
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{ 'line-color':VISION_COLOR, 'line-width':2.5, 'line-opacity':0, 'line-dasharray':[5,3] }
+    });
+    map.on('click', `${sid}-vision`, e => { e.originalEvent.stopPropagation(); selectSection(f.properties.section); });
+    map.on('mouseenter', `${sid}-vision`, () => { map.getCanvas().style.cursor='pointer'; });
+    map.on('mouseleave', `${sid}-vision`, () => { map.getCanvas().style.cursor=''; });
+  });
+
+  // One-way cycle arrows — draw a custom arrow icon then add symbol layer
+  const arrowSize = 24;
+  const arrowCanvas = document.createElement('canvas');
+  arrowCanvas.width = arrowSize;
+  arrowCanvas.height = arrowSize;
+  const ctx = arrowCanvas.getContext('2d');
+  // Draw a simple chevron pointing right (MapLibre will rotate to line direction)
+  ctx.strokeStyle = '#1A9E6E';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(6,  6);
+  ctx.lineTo(18, 12);
+  ctx.lineTo(6,  18);
+  ctx.stroke();
+
+  map.addImage('cycle-arrow', { width:arrowSize, height:arrowSize,
+    data: ctx.getImageData(0, 0, arrowSize, arrowSize).data
+  });
+
+  const oneWayFeatures = GEOJSON.features.filter(f =>
+    f.properties.one_way && f.properties.cycleway && !f.properties.proposed
+  );
+  map.addSource('oneway-arrows', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: oneWayFeatures }
+  });
+  map.addLayer({
+    id: 'oneway-arrows',
+    type: 'symbol',
+    source: 'oneway-arrows',
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 80,
+      'icon-image': 'cycle-arrow',
+      'icon-size': 1,
+      'icon-rotation-alignment': 'map',
+      'icon-allow-overlap': true,
+    },
+    paint: {
+      'icon-opacity': ['interpolate',['linear'],['zoom'], 12,0, 13,1]
+    }
+  });
+
+  mapReady = true;
+  updateMapLayers();
+  renderPOIs();
+});
+
+// ── CONTROLS ──────────────────────────────────────────────────────────────────
+
+function toggleLayer(key, el) {
+  if (activeLayers.has(key)) {
+    if (activeLayers.size === 1) return; // prevent zero selection
+    activeLayers.delete(key);
+    el.classList.remove('checked');
+  } else {
+    activeLayers.add(key);
+    el.classList.add('checked');
+  }
+  updateMapLayers();
+  if (activeSection) updateDetail();
+}
+
+function toggleVision() {
+  visionOn = !visionOn;
+  document.getElementById('vision-toggle').classList.toggle('checked', visionOn);
+  updateMapLayers();
+  updateProjectMarkers();
+  if (activeSection) updateDetail();
+}
+
+// ── MAP LAYER UPDATES ─────────────────────────────────────────────────────────
+
+function offsetExpr(offset) {
+  return ['interpolate',['linear'],['zoom'], 10, offset*0.5, 15, offset];
+}
+
+function updateMapLayers() {
+  if (!mapReady) return;
+
+  GEOJSON.features.forEach(f => {
+    const sid  = f.properties.segment_id;
+    const p    = f.properties;
+    const sel  = activeSection !== null && activeSection === p.section;
+
+    Object.entries(LAYERS).forEach(([key, cfg]) => {
+      const show = activeLayers.has(key) && cfg.filter(p);
+      const hasSelection = activeSection !== null;
+      const opacity = !show ? 0 : hasSelection ? (sel ? 1 : 0.6) : 0.7;
+      map.setPaintProperty(`${sid}-${key}`, 'line-opacity', opacity);
+      map.setPaintProperty(`${sid}-${key}`, 'line-width',   show && sel ? 5 : 3);
+      // Casing hidden always — causes bleed with offset lines
+      map.setPaintProperty(`${sid}-${key}-glow`, 'line-opacity', 0);
+      map.setPaintProperty(`${sid}-${key}-glow`, 'line-width',   0);
+    });
+
+    // Vision
+    const showVision = visionOn && p.proposed;
+    const hasSelection = activeSection !== null;
+    map.setPaintProperty(`${sid}-vision`, 'line-opacity',
+      !showVision ? 0 : hasSelection ? (sel ? 1 : 0.6) : 0.6
+    );
+    map.setPaintProperty(`${sid}-vision`, 'line-width', showVision && sel ? 4 : 2.5);
+  });
+
+  // Arrows only visible when cycle layer is active
+  if (mapReady) {
+    map.setLayoutProperty('oneway-arrows', 'visibility',
+      activeLayers.has('cycle') ? 'visible' : 'none'
+    );
+  }
+}
+
+// ── PROJECT MARKERS ───────────────────────────────────────────────────────────
+
+function segmentMidpoint(segment_id) {
+  // Return the midpoint coordinate of a segment's geometry
+  const feature = GEOJSON.features.find(f => f.properties.segment_id === segment_id);
+  if (!feature) return null;
+  const coords = feature.geometry.coordinates;
+  const mid = coords[Math.floor(coords.length / 2)];
+  return [mid[0], mid[1]];
+}
+
+function makeMarkerEl() {
+  const el = document.createElement('div');
+  el.style.cssText = `
+    width:30px; height:30px; border-radius:50%;
+    background:#9B59B6; border:2.5px solid white;
+    box-shadow:0 2px 8px rgba(0,0,0,0.25);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    pointer-events:auto; transition:outline 0.15s, box-shadow 0.15s;
+  `;
+  const icon = document.createElement('span');
+  icon.className = 'material-symbols-outlined';
+  icon.style.cssText = 'font-size:16px; color:white; pointer-events:none; user-select:none;';
+  icon.textContent = 'construction';
+  el.appendChild(icon);
+  el._inner = el; // self-reference so highlight code works unchanged
+  return el;
+}
+
+function updateProjectMarkers() {
+  projectMarkers.forEach(m => m.remove());
+  projectMarkers = [];
+
+  if (!visionOn) return;
+
+  PROJECTS.forEach(proj => {
+    let lngLat = null;
+    if (proj.lat && proj.lon) {
+      lngLat = [proj.lon, proj.lat];
+    } else if (proj.segment_id) {
+      lngLat = segmentMidpoint(proj.segment_id);
+    }
+    if (!lngLat) return;
+
+    const el = makeMarkerEl();
+    el._proj = proj; // store reference for highlight updates
+
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(lngLat)
+      .addTo(map);
+
+    el._inner.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showProject(proj);
+    });
+
+    projectMarkers.push(marker);
+  });
+
+  updateMarkerHighlights();
+}
+
+function updateMarkerHighlights() {
+  if (!visionOn) return;
+  projectMarkers.forEach(marker => {
+    const el = marker.getElement();
+    const proj = el._proj;
+    if (!proj) return;
+    const projSection = proj.segment_id ? segmentSection[proj.segment_id] : null;
+    const isSelected = proj.project_id === activeProject ||
+      (activeSection !== null && projSection === activeSection);
+    el.style.outline   = isSelected ? '3px solid white' : 'none';
+    el.style.outlineOffset = isSelected ? '2px' : '0';
+    el.style.boxShadow = isSelected
+      ? '0 0 0 5px #9B59B6, 0 4px 12px rgba(0,0,0,0.3)'
+      : '0 2px 8px rgba(0,0,0,0.25)';
+    el.style.zIndex    = isSelected ? '10' : '1';
+  });
+}
+
+// ── SECTION SELECTION ─────────────────────────────────────────────────────────
+
+function selectSection(name) {
+  activeSection = name;
+  activeProject = null;
+  updateMapLayers();
+  updateDetail();
+  flyToSection(name);
+  updateNavButtons();
+  updateMarkerHighlights();
+}
+
+function closeDetail() {
+  activeSection = null;
+  activeProject = null;
+  updateMapLayers();
+  document.getElementById('detail-panel').classList.remove('visible');
+  document.getElementById('hint').style.display = 'flex';
+  updateNavButtons();
+  updateMarkerHighlights();
+}
+
+function showProject(proj) {
+  activeSection = null;
+  activeProject = proj.project_id;
+  updateMapLayers();
+  updateNavButtons();
+  updateMarkerHighlights();
+
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar.classList.contains('collapsed')) toggleSidebar();
+
+  document.getElementById('hint').style.display = 'none';
+  document.getElementById('detail-panel').classList.add('visible');
+  document.getElementById('detail-section-name').innerHTML =
+    `<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:var(--vision);margin-right:5px">construction</span>${proj.title}`;
+
+  let html = '';
+  if (proj.description) {
+    html += `<p style="font-size:13px;color:var(--muted);line-height:1.75;font-weight:400;margin-bottom:12px">${proj.description}</p>`;
+  }
+  if (proj.image_url) {
+    html += `<img src="${proj.image_url}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
+  }
+  if (proj.image2_url) {
+    html += `<img src="${proj.image2_url}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
+  }
+  if (proj.link) {
+    html += `<a href="${proj.link}" target="_blank" class="project-card-link">Read more →</a>`;
+  }
+
+  // CTAs
+  const ctas = [
+    { key:'url_join',       icon:'group_add',          label:'Join the trust to support this work' },
+    { key:'url_landowner',  icon:'mail',               label:'Contact the landowner to express support' },
+    { key:'url_councillor', icon:'mail',               label:'Email your councillor' },
+    { key:'url_share',      icon:'share',              label:'Share this route' },
+    { key:'url_donate',     icon:'payments',           label:'Donate to help unlock this route' },
+    { key:'url_volunteer',  icon:'volunteer_activism', label:'Volunteer to improve the route' },
+  ];
+  const activeCTAs = ctas.filter(c => proj[c.key]);
+  if (activeCTAs.length) {
+    html += `<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:8px">`;
+    activeCTAs.forEach(c => {
+      html += `<a href="${proj[c.key]}" target="_blank" style="
+        display:flex;align-items:center;gap:10px;
+        padding:9px 12px;border-radius:4px;
+        background:rgba(155,89,182,0.07);border:1px solid rgba(155,89,182,0.2);
+        color:var(--vision);text-decoration:none;
+        font-size:12px;font-weight:500;line-height:1.3;
+        transition:background 0.15s;
+      " onmouseover="this.style.background='rgba(155,89,182,0.14)'"
+         onmouseout="this.style.background='rgba(155,89,182,0.07)'">
+        <span class="material-symbols-outlined" style="font-size:18px;flex-shrink:0">${c.icon}</span>
+        ${c.label}
+      </a>`;
+    });
+    html += `</div>`;
+  }
+
+  if (!html) {
+    html = `<p style="font-size:12px;color:var(--muted);font-style:italic">No further details available.</p>`;
+  }
+  document.getElementById('detail-body').innerHTML = html;
+}
+
+function navigateSection(dir) {
+  const next = sections.indexOf(activeSection) + dir;
+  if (next >= 0 && next < sections.length) selectSection(sections[next]);
+}
+
+function flyToSection(name) {
+  const coords = (sectionMap[name]||[]).flatMap(f => f.geometry.coordinates.map(c=>[c[0],c[1]]));
+  if (!coords.length) return;
+  const lngs = coords.map(c=>c[0]), lats = coords.map(c=>c[1]);
+  map.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]],
+    { padding:{top:80,bottom:120,left:330,right:80}, maxZoom:17, duration:850 });
+}
+
+function updateNavButtons() {
+  const i = sections.indexOf(activeSection);
+  document.getElementById('btn-prev').disabled = i <= 0;
+  document.getElementById('btn-next').disabled = i < 0 || i >= sections.length-1;
+}
+
+// ── DETAIL PANEL ──────────────────────────────────────────────────────────────
+
+function updateDetail() {
+  if (!activeSection) return;
+  document.getElementById('hint').style.display = 'none';
+  document.getElementById('detail-panel').classList.add('visible');
+  document.getElementById('detail-section-name').textContent = activeSection;
+
+  const features = sectionMap[activeSection] || [];
+  const body = document.getElementById('detail-body');
+  let html = '';
+
+  // Vision improvement projects only (if vision is on)
+  if (visionOn) {
+    const sectionProjects = PROJECTS.filter(proj => {
+      if (proj.segment_id) return segmentSection[proj.segment_id] === activeSection;
+      return false;
+    });
+
+    if (sectionProjects.length) {
+      html += `<span class="project-section-label" style="color:var(--vision)"><span class="material-symbols-outlined" style="font-size:11px;vertical-align:-2px">construction</span> Vision — Improvement Projects</span>`;
+      sectionProjects.forEach(proj => {
+        html += `
+          <div class="project-card">
+            <div class="project-card-title">${proj.title}</div>
+            ${proj.description ? `<div class="project-card-desc">${proj.description}</div>` : ''}
+            ${proj.image_url ? `<img class="project-card-img" src="${proj.image_url}" onclick="openLightbox(this.src)" alt="">` : ''}
+            <a class="project-card-link" href="#" onclick="event.preventDefault();showProject(${JSON.stringify(proj).replace(/"/g,'&quot;')})">Read more →</a>
+          </div>`;
+      });
+    } else {
+      html = `<p style="font-size:12px;color:var(--muted);font-style:italic;padding-top:4px">No improvement projects for this section.</p>`;
+    }
+  } else {
+    html = `<p style="font-size:12px;color:var(--muted);font-style:italic;padding-top:4px">Enable "Show the vision" to see improvement projects for this section.</p>`;
+  }
+
+  body.innerHTML = html;
+}
+
+function renderPOIs() {
+  poiMarkers.forEach(m => m.remove());
+  poiMarkers = [];
+
+  POIS.forEach(poi => {
+    const isWheels = poi.layer === 'Sheaf Wheels';
+    const el = document.createElement('div');
+    el.className = `poi-marker ${isWheels ? 'wheels' : 'refreshments'}`;
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-outlined';
+    icon.textContent = isWheels ? 'circle' : 'local_cafe';
+    el.appendChild(icon);
+
+    const popup = new maplibregl.Popup({ offset:16, maxWidth:'200px', closeButton:false })
+      .setHTML(`<div class="popup-title">${poi.name}</div><div class="popup-desc">${poi.layer}</div>`);
+
+    el.addEventListener('mouseenter', () => { popup.setLngLat([poi.lng, poi.lat]).addTo(map); });
+    el.addEventListener('mouseleave', () => popup.remove());
+
+    const marker = new maplibregl.Marker({ element:el, anchor:'center' })
+      .setLngLat([poi.lng, poi.lat])
+      .addTo(map);
+
+    poiMarkers.push(marker);
+  });
+
+  updatePOIVisibility();
+}
+
+const POI_MIN_ZOOM = 16;
+
+function updatePOIVisibility() {
+  const visible = map.getZoom() >= POI_MIN_ZOOM;
+  poiMarkers.forEach(m => {
+    m.getElement().style.display = visible ? 'flex' : 'none';
+  });
+}
+
+map.on('zoom', updatePOIVisibility);
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
+// ── SIDEBAR COLLAPSE ─────────────────────────────────────────────────────────
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const tab = document.getElementById('collapse-tab');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  tab.innerHTML = collapsed ? '&#8250;' : '&#8249;';
+  // Nudge map to rerender
+  setTimeout(() => map.resize(), 310);
+}
+</script>
+</body>
+</html>
