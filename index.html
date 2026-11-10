@@ -397,11 +397,12 @@
 
 <script>
 // Data loaded from external files
-let GEOJSON, WATERSHED, PROJECTS, POIS;
+let GEOJSON, ROUTE_LINES, WATERSHED, PROJECTS, POIS;
 
 async function loadData() {
-  [GEOJSON, WATERSHED, PROJECTS, POIS] = await Promise.all([
+  [GEOJSON, ROUTE_LINES, WATERSHED, PROJECTS, POIS] = await Promise.all([
     fetch('./data/sheaf.geojson').then(r => r.json()),
+    fetch('./data/routes.geojson').then(r => r.json()),
     fetch('./data/watershed.geojson').then(r => r.json()),
     fetch('./data/projects.json').then(r => r.json()),
     fetch('./data/pois.json').then(r => r.json()),
@@ -443,10 +444,12 @@ function setupDataIndices() {
 }
 // ── LAYER DEFINITIONS ─────────────────────────────────────────────────────────
 // Each layer: which segments it shows, offset, colour
+// Which segments belong to each route is decided by scripts/build_routes.py,
+// which writes data/routes.geojson. Here we only say how each route looks.
 const LAYERS = {
-  walk:     { color:'#E07820', offset: 0,   filter: p => !p.proposed && p.walking_default },
-  stepfree: { color:'#C0392B', offset: 4,   filter: p => !p.proposed && !p.on_road && p.step_free },
-  cycle:    { color:'#1A9E6E', offset:-4,   filter: p => !p.proposed && p.cycleway },
+  walk:     { route:'walk',      color:'#E07820', offset: 0 },
+  stepfree: { route:'step_free', color:'#C0392B', offset: 4 },
+  cycle:    { route:'cycle',     color:'#1A9E6E', offset:-4 },
 };
 const VISION_COLOR = '#9B59B6';
 
@@ -527,38 +530,27 @@ map.on('load', async () => {
     }
   }, 'Forest');
 
-    // Add one source per segment, three line layers per segment (one per route layer) + vision
-  GEOJSON.features.forEach(f => {
-    const sid = f.properties.segment_id;
-    map.addSource(`seg-${sid}`, { type:'geojson', data:f });
+  // All route lines come from one source; each route is one layer
+  map.addSource('routes', { type:'geojson', data:ROUTE_LINES });
 
-    // Walk, stepfree, cycle layers
-    Object.entries(LAYERS).forEach(([key, cfg]) => {
-      // Casing — white line drawn FIRST (below), wider than main line
-      map.addLayer({ id:`${sid}-${key}-glow`, type:'line', source:`seg-${sid}`,
-        layout:{'line-cap':'round','line-join':'round'},
-        paint:{ 'line-color':'#ffffff', 'line-width':8, 'line-opacity':0,
-                'line-offset':['interpolate',['linear'],['zoom'],10,cfg.offset*0.5,15,cfg.offset] }
-      });
-      // Main coloured line — drawn SECOND (on top of casing)
-      map.addLayer({ id:`${sid}-${key}`, type:'line', source:`seg-${sid}`,
-        layout:{'line-cap':'round','line-join':'round'},
-        paint:{ 'line-color':cfg.color, 'line-width':3, 'line-opacity':0,
-                'line-offset':['interpolate',['linear'],['zoom'],10,cfg.offset*0.5,15,cfg.offset] }
-      });
-      map.on('click', `${sid}-${key}`, e => { e.originalEvent.stopPropagation(); selectSection(f.properties.section); });
-      map.on('mouseenter', `${sid}-${key}`, () => { map.getCanvas().style.cursor='pointer'; });
-      map.on('mouseleave', `${sid}-${key}`, () => { map.getCanvas().style.cursor=''; });
+  Object.values(LAYERS).forEach(cfg => {
+    map.addLayer({ id:`route-${cfg.route}`, type:'line', source:'routes',
+      filter:['==', ['get','route'], cfg.route],
+      layout:{ 'line-cap':'round', 'line-join':'round' },
+      paint:{ 'line-color':cfg.color, 'line-width':3, 'line-opacity':0.7,
+              'line-offset':offsetExpr(cfg.offset) }
     });
+  });
+  map.addLayer({ id:'route-vision', type:'line', source:'routes',
+    filter:['==', ['get','route'], 'vision'],
+    layout:{ 'line-cap':'round', 'line-join':'round' },
+    paint:{ 'line-color':VISION_COLOR, 'line-width':2.5, 'line-opacity':0.6, 'line-dasharray':[5,3] }
+  });
 
-    // Vision layer (proposed segments)
-    map.addLayer({ id:`${sid}-vision`, type:'line', source:`seg-${sid}`,
-      layout:{'line-cap':'round','line-join':'round'},
-      paint:{ 'line-color':VISION_COLOR, 'line-width':2.5, 'line-opacity':0, 'line-dasharray':[5,3] }
-    });
-    map.on('click', `${sid}-vision`, e => { e.originalEvent.stopPropagation(); selectSection(f.properties.section); });
-    map.on('mouseenter', `${sid}-vision`, () => { map.getCanvas().style.cursor='pointer'; });
-    map.on('mouseleave', `${sid}-vision`, () => { map.getCanvas().style.cursor=''; });
+  ['route-walk','route-step_free','route-cycle','route-vision'].forEach(id => {
+    map.on('click', id, e => { e.originalEvent.stopPropagation(); selectSection(e.features[0].properties.section); });
+    map.on('mouseenter', id, () => { map.getCanvas().style.cursor='pointer'; });
+    map.on('mouseleave', id, () => { map.getCanvas().style.cursor=''; });
   });
 
   // One-way cycle arrows — draw a custom arrow icon then add symbol layer
@@ -582,17 +574,11 @@ map.on('load', async () => {
     data: ctx.getImageData(0, 0, arrowSize, arrowSize).data
   });
 
-  const oneWayFeatures = GEOJSON.features.filter(f =>
-    f.properties.one_way && f.properties.cycleway && !f.properties.proposed
-  );
-  map.addSource('oneway-arrows', {
-    type: 'geojson',
-    data: { type: 'FeatureCollection', features: oneWayFeatures }
-  });
   map.addLayer({
     id: 'oneway-arrows',
     type: 'symbol',
-    source: 'oneway-arrows',
+    source: 'routes',
+    filter: ['all', ['==', ['get','route'], 'cycle'], ['==', ['get','one_way'], true]],
     layout: {
       'symbol-placement': 'line',
       'symbol-spacing': 80,
@@ -643,37 +629,24 @@ function offsetExpr(offset) {
 function updateMapLayers() {
   if (!mapReady) return;
 
-  GEOJSON.features.forEach(f => {
-    const sid  = f.properties.segment_id;
-    const p    = f.properties;
-    const sel  = activeSection !== null && activeSection === p.section;
+  // When a section is selected it goes bold; everything else stays slightly faded
+  const isSel = ['==', ['get','section'], activeSection ?? ''];
+  const opacity = (base) => activeSection === null ? base : ['case', isSel, 1, 0.6];
+  const width   = (base, bold) => activeSection === null ? base : ['case', isSel, bold, base];
 
-    Object.entries(LAYERS).forEach(([key, cfg]) => {
-      const show = activeLayers.has(key) && cfg.filter(p);
-      const hasSelection = activeSection !== null;
-      const opacity = !show ? 0 : hasSelection ? (sel ? 1 : 0.6) : 0.7;
-      map.setPaintProperty(`${sid}-${key}`, 'line-opacity', opacity);
-      map.setPaintProperty(`${sid}-${key}`, 'line-width',   show && sel ? 5 : 3);
-      // Casing hidden always — causes bleed with offset lines
-      map.setPaintProperty(`${sid}-${key}-glow`, 'line-opacity', 0);
-      map.setPaintProperty(`${sid}-${key}-glow`, 'line-width',   0);
-    });
-
-    // Vision
-    const showVision = visionOn && p.proposed;
-    const hasSelection = activeSection !== null;
-    map.setPaintProperty(`${sid}-vision`, 'line-opacity',
-      !showVision ? 0 : hasSelection ? (sel ? 1 : 0.6) : 0.6
-    );
-    map.setPaintProperty(`${sid}-vision`, 'line-width', showVision && sel ? 4 : 2.5);
+  Object.entries(LAYERS).forEach(([key, cfg]) => {
+    const id = `route-${cfg.route}`;
+    map.setLayoutProperty(id, 'visibility', activeLayers.has(key) ? 'visible' : 'none');
+    map.setPaintProperty(id, 'line-opacity', opacity(0.7));
+    map.setPaintProperty(id, 'line-width', width(3, 5));
   });
 
-  // Arrows only visible when cycle layer is active
-  if (mapReady) {
-    map.setLayoutProperty('oneway-arrows', 'visibility',
-      activeLayers.has('cycle') ? 'visible' : 'none'
-    );
-  }
+  map.setLayoutProperty('route-vision', 'visibility', visionOn ? 'visible' : 'none');
+  map.setPaintProperty('route-vision', 'line-opacity', opacity(0.6));
+  map.setPaintProperty('route-vision', 'line-width', width(2.5, 4));
+
+  // Arrows only visible when the cycle route is shown
+  map.setLayoutProperty('oneway-arrows', 'visibility', activeLayers.has('cycle') ? 'visible' : 'none');
 }
 
 // ── PROJECT MARKERS ───────────────────────────────────────────────────────────
