@@ -931,25 +931,59 @@ function flyToSection(name) {
 
 // ── DETAIL PANEL ──────────────────────────────────────────────────────────────
 
-// One-line summary of a section, worked out from routes.geojson
+// Length of the journey through a section: the shortest way from its upstream end
+// to its downstream end. Where a route offers alternative paths, adding up every
+// line would overcount.
+function journeyLength(fs) {
+  if (fs.length === 1) return fs[0].properties.length_m;
+  const key = c => c.join(',');
+  const coords = {}, edges = [];
+  fs.forEach(f => {
+    const c = f.geometry.coordinates, a = c[0], b = c[c.length - 1];
+    coords[key(a)] = a; coords[key(b)] = b;
+    edges.push([key(a), key(b), f.properties.length_m]);
+  });
+  const downValley = c => (c[0] + 1.5155) * 0.0532 + (c[1] - 53.3276) * 0.0577;  // Dore → Don
+  const nodes = Object.keys(coords);
+  const start = nodes.reduce((a, b) => downValley(coords[a]) <= downValley(coords[b]) ? a : b);
+  const end   = nodes.reduce((a, b) => downValley(coords[a]) >= downValley(coords[b]) ? a : b);
+  const dist = Object.fromEntries(nodes.map(n => [n, Infinity]));
+  dist[start] = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    edges.forEach(([a, b, w]) => {
+      if (dist[a] + w < dist[b]) dist[b] = dist[a] + w;
+      if (dist[b] + w < dist[a]) dist[a] = dist[b] + w;
+    });
+  }
+  return isFinite(dist[end]) ? dist[end] : fs.reduce((sum, f) => sum + f.properties.length_m, 0);
+}
+
+// One chip per route currently shown, worked out from routes.geojson
 function sectionSummary(name) {
   const lines = ROUTE_LINES.features.filter(f => f.properties.section === name);
-  const of = route => lines.filter(f => f.properties.route === route);
-  const walk = of('walk'), stepFree = of('step_free'), cycle = of('cycle');
   const grey = '#b9bcbf';
+  const km = fs => `${(journeyLength(fs) / 1000).toFixed(1)} km`;
   const chips = [];
+  let steep = false;
 
-  const walkM = walk.reduce((sum, f) => sum + f.properties.length_m, 0);
-  if (walkM) chips.push(['var(--walk)', `${(walkM / 1000).toFixed(1)} km`]);
-
-  chips.push(stepFree.length ? ['var(--stepfree)', 'Step-free route'] : [grey, 'No step-free route yet']);
-
-  if (!cycle.length)                              chips.push([grey, 'No cycle route yet']);
-  else if (cycle.every(f => f.properties.on_road)) chips.push(['var(--cycle)', 'Cycling on road']);
-  else if (cycle.some(f => f.properties.on_road))  chips.push(['var(--cycle)', 'Cycling partly on road']);
-  else                                             chips.push(['var(--cycle)', 'Cycle path']);
-
-  if (lines.some(f => f.properties.route !== 'vision' && f.properties.steep)) chips.push([grey, 'Steep in places']);
+  const routes = [
+    { key:'walk',     route:'walk',      label:'Walk',      color:'var(--walk)' },
+    { key:'stepfree', route:'step_free', label:'Step-free', color:'var(--stepfree)' },
+    { key:'cycle',    route:'cycle',     label:'Cycle',     color:'var(--cycle)' },
+  ];
+  routes.filter(r => activeLayers.has(r.key)).forEach(r => {
+    const fs = lines.filter(f => f.properties.route === r.route);
+    if (!fs.length) { chips.push([grey, `${r.label} · no route yet`]); return; }
+    let text = `${r.label} · ${km(fs)}`;
+    if (r.key === 'walk' && fs.some(f => !f.properties.step_free)) text += ' · has steps';
+    if (r.key === 'cycle') {
+      if (fs.every(f => f.properties.on_road))     text += ' · on road';
+      else if (fs.some(f => f.properties.on_road)) text += ' · partly on road';
+    }
+    if (fs.some(f => f.properties.steep)) steep = true;
+    chips.push([r.color, text]);
+  });
+  if (steep) chips.push([grey, 'Steep in places']);
 
   return `<div class="chips">${chips.map(([c, t]) => `<span class="chip"><i style="background:${c}"></i>${t}</span>`).join('')}</div>`;
 }
