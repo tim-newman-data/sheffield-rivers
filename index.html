@@ -169,8 +169,8 @@
 
   /* ── Start card (shown until a section is chosen) ── */
   #start-card {
-    flex:1; display:flex; flex-direction:column; justify-content:center;
-    padding:28px 24px;
+    flex:1; display:flex; flex-direction:column; justify-content:flex-start;
+    padding:20px 24px;
   }
   #start-card h2 {
     font-family:'Barlow Condensed',sans-serif; font-size:24px; font-weight:600;
@@ -244,7 +244,8 @@
   }
   #detail-close:hover { color:var(--text); }
 
-  #detail-body { flex:1; overflow-y:auto; padding:12px 20px 16px; }
+  /* Only as tall as its content, so the Next button sits straight after it (it still scrolls if long) */
+  #detail-body { flex:0 1 auto; overflow-y:auto; padding:12px 20px 16px; }
   #detail-body::-webkit-scrollbar { width:3px; }
   #detail-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
