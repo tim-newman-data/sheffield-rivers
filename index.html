@@ -714,19 +714,58 @@ map.on('load', async () => {
     });
   } catch(e) { console.warn('Landmark labels unavailable', e); }
 
-  // Start with the whole route in view, allowing for the sidebar if it's open
-  const routeCoords = ROUTE_LINES.features
-    .filter(f => f.properties.route !== 'vision')
-    .flatMap(f => f.geometry.coordinates);
-  const lngs = routeCoords.map(c => c[0]), lats = routeCoords.map(c => c[1]);
-  const sidebarOpen = !document.getElementById('sidebar').classList.contains('collapsed');
-  map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-    { padding:{ top:50, bottom:50, left: sidebarOpen ? 400 : 50, right:90 }, duration:0 });
+  fitRouteInView();
+
+  // Until someone moves the map themselves, keep the whole route framed if the
+  // frame changes size (Wix can resize the embed after load) or the sidebar opens/closes
+  map.on('movestart', e => { if (e.originalEvent) userMovedMap = true; });
+  map.on('resize', () => { if (!userMovedMap && !contextSection) fitRouteInView(); });
+  // Terrain heights arrive after the first fit and shift things slightly, so frame once more
+  map.once('idle', () => { if (!userMovedMap && !contextSection) fitRouteInView(); });
 
   mapReady = true;
   updateMapLayers();
   renderPOIs();
 });
+
+// ── Framing the whole route ─────────────────────────────────────────────────
+// The map is tilted, so a plain "fit bounds" (which assumes a flat, top-down view)
+// leaves the near end of the route cut off. Instead: fit flat, tilt, then nudge the
+// zoom and centre until every point of the route sits inside the visible area.
+let userMovedMap = false;
+const START_PITCH = 30;
+
+function fitRouteInView() {
+  const coords = ROUTE_LINES.features
+    .filter(f => f.properties.route !== 'vision')
+    .flatMap(f => f.geometry.coordinates);
+  const lngs = coords.map(c => c[0]), lats = coords.map(c => c[1]);
+  const W = map.getContainer().clientWidth, H = map.getContainer().clientHeight;
+  const sidebarOpen = !document.getElementById('sidebar').classList.contains('collapsed');
+  const pad = { top:60, bottom:50, right:90, left: sidebarOpen ? 400 : 50 };
+  if (W - pad.left - pad.right < 100) pad.left = 50;          // very narrow: ignore the sidebar
+  const availW = W - pad.left - pad.right, availH = H - pad.top - pad.bottom;
+  if (availW < 50 || availH < 50) return;
+
+  map.jumpTo({ pitch:0, bearing:0 });
+  map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+    { padding:pad, duration:0 });
+  map.jumpTo({ pitch:START_PITCH });
+
+  for (let i = 0; i < 15; i++) {
+    const pts = coords.map(c => map.project(c));
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const scale = Math.min(availW / (maxX - minX), availH / (maxY - minY));
+    const dx = (minX + maxX) / 2 - (pad.left + availW / 2);
+    const dy = (minY + maxY) / 2 - (pad.top + availH / 2);
+    if (Math.abs(Math.log2(scale)) < 0.01 && Math.abs(dx) < 2 && Math.abs(dy) < 2) break;
+    map.jumpTo({
+      center: map.unproject([W / 2 + dx, H / 2 + dy]),
+      zoom: map.getZoom() + Math.log2(scale) * 0.8,
+    });
+  }
+}
 
 function setBasemap(style) {
   if (!map.getLayer('satellite')) return;
@@ -915,6 +954,8 @@ function closeDetail() {
   document.getElementById('detail-footer').innerHTML = '';
   toggleControls(false);
   updateMarkerHighlights();
+  userMovedMap = false;
+  fitRouteInView();
 }
 
 function backToSection() {
