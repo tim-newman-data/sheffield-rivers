@@ -395,27 +395,15 @@
 let GEOJSON, WATERSHED, PROJECTS, POIS;
 
 async function loadData() {
-  try {
-    const responses = await Promise.all([
-      fetch('./data/sheaf.geojson'),
-      fetch('./data/watershed.geojson'),
-      fetch('./data/projects.json'),
-      fetch('./data/pois.json'),
-    ]);
-    responses.forEach((r, i) => {
-      const names = ['sheaf.geojson','watershed.geojson','projects.json','pois.json'];
-      console.log(`${names[i]}: ${r.status} ${r.statusText} (${r.url})`);
-    });
-    [GEOJSON, WATERSHED, PROJECTS, POIS] = await Promise.all(
-      responses.map(r => r.json())
-    );
-    console.log('Data loaded:', GEOJSON.features.length, 'features');
-  } catch(e) {
-    console.error('loadData failed:', e);
-  }
+  [GEOJSON, WATERSHED, PROJECTS, POIS] = await Promise.all([
+    fetch('./data/sheaf.geojson').then(r => r.json()),
+    fetch('./data/watershed.geojson').then(r => r.json()),
+    fetch('./data/projects.json').then(r => r.json()),
+    fetch('./data/pois.json').then(r => r.json()),
+  ]);
 }
 
-const MAPTILER_KEY = 'WMqBimDurJHRmbcELx6H';
+const MAPTILER_KEY = 'BMdt5WFiajvBv7IxeSBj';
 
 // ── DATA ─────────────────────────────────────────────────────────────────────
 
