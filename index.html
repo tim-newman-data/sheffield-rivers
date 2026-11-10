@@ -25,7 +25,6 @@
     --stepfree:    #C0392B;   /* coral red — step-free */
     --cycle:       #1A9E6E;   /* teal   — cycle */
     --vision:      #9B59B6;   /* purple — vision/proposed */
-    --project:     #E63946;   /* red    — project pins */
 
     --bg:          #f2f2f2;
     --panel:       #ffffff;
@@ -74,19 +73,6 @@
     user-select:none;
   }
   #collapse-tab:hover { color:var(--accent); }
-
-  #sidebar-header {
-    padding:16px 20px 12px;
-    border-bottom:1px solid var(--border);
-    flex-shrink:0; position:relative;
-  }
-  #trust-logo {
-    width:160px; display:block;
-  }
-  #sidebar-header p {
-    margin-top:6px; font-size:10px; font-weight:300;
-    color:var(--muted); letter-spacing:0.08em; text-transform:uppercase;
-  }
 
   /* ── Layer controls ── */
   #layer-controls {
@@ -145,7 +131,6 @@
   .layer-label {
     font-size:12px; font-weight:500; color:var(--text); flex:1; line-height:1.3;
   }
-  .layer-icon { font-size:15px; flex-shrink:0; }
 
   /* Vision toggle */
   .vision-row {
@@ -202,6 +187,7 @@
     transition:background 0.15s;
   }
   .btn-primary:hover { background:var(--accent-hover); }
+  .btn-primary:disabled { opacity:0.5; cursor:default; }
   .btn-primary .material-symbols-outlined { font-size:18px; flex-shrink:0; }
   .btn-secondary {
     width:100%; padding:10px 14px; border-radius:6px; cursor:pointer;
@@ -262,24 +248,6 @@
   #detail-body::-webkit-scrollbar { width:3px; }
   #detail-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
-  /* Segment rows in detail */
-  .seg-row {
-    display:flex; align-items:center; gap:10px;
-    padding:8px 0; border-bottom:1px solid var(--border);
-  }
-  .seg-row:last-child { border-bottom:none; }
-  .seg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-  .seg-info { flex:1; }
-  .seg-name { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; }
-  .seg-dist { font-size:11px; color:var(--muted); font-weight:300; }
-  .seg-tags { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; }
-
-  .tag { font-size:9px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
-         padding:2px 5px; border-radius:2px; border:1px solid; }
-  .tag-warn  { color:#b56000; border-color:rgba(181,96,0,0.3);   background:rgba(181,96,0,0.07); }
-  .tag-bad   { color:#c0392b; border-color:rgba(192,57,43,0.3);  background:rgba(192,57,43,0.06); }
-  .tag-steep { color:#8e6000; border-color:rgba(142,96,0,0.3);   background:rgba(142,96,0,0.06); }
-
   /* Project card in detail */
   .project-card {
     margin-top:12px; padding:12px; border-radius:4px;
@@ -306,7 +274,7 @@
     color:var(--vision); margin-top:14px; margin-bottom:6px; display:block;
   }
 
-  /* ── Project popup (for point markers) ── */
+  /* ── Popups on cafés and wheels ── */
   .maplibregl-popup-content {
     font-family:'Barlow',sans-serif !important;
     padding:14px !important; border-radius:6px !important;
@@ -315,18 +283,14 @@
   }
   .popup-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:5px; }
   .popup-desc  { font-size:13px; color:var(--muted); line-height:1.75; font-weight:400; }
-  .popup-img   { width:100%; border-radius:3px; margin-top:8px; max-height:120px; object-fit:cover; display:block; }
-  .popup-link  { display:inline-block; margin-top:8px; font-size:10px; font-weight:600;
-                 letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); text-decoration:none; }
 
   /* ── POI markers ── */
   .poi-marker {
     width:28px; height:28px; border-radius:50%;
     border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.2);
     display:flex; align-items:center; justify-content:center;
-    cursor:pointer; transition:transform 0.15s;
+    cursor:pointer;
   }
-  .poi-marker:hover { transform:scale(1.15); }
   .poi-marker .material-symbols-outlined { font-size:15px; color:white; pointer-events:none; }
   .poi-marker.refreshments { background:#7a8a8a; }
   .poi-marker.wheels       { background:#7a8a8a; }
@@ -364,6 +328,13 @@
   #basemap-switch button + button { border-left:1px solid var(--border); }
   #basemap-switch button.active { background:var(--accent); color:#fff; }
 
+  /* Shown if the map or its data can't be loaded */
+  #load-error {
+    display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:30;
+    max-width:300px; padding:16px 20px; background:#fff; border:1px solid var(--border);
+    border-radius:6px; box-shadow:var(--shadow); font-size:14px; line-height:1.5; text-align:center;
+  }
+
   /* Navigate link in a section */
   .nav-link {
     display:inline-flex; align-items:center; gap:4px; margin-top:4px;
@@ -387,6 +358,7 @@
 </div>
 
 <div id="map"></div>
+<div id="load-error" role="alert">Sorry, the map couldn't be loaded. Please refresh the page to try again.</div>
 
 <div id="basemap-switch" role="group" aria-label="Map style">
   <button class="active" data-style="map" onclick="setBasemap('map')">Map</button>
@@ -452,7 +424,7 @@
   <div id="start-card">
     <h2>Walk the River Sheaf</h2>
     <p id="start-summary">From Dore and Totley Station to where the Sheaf meets the Don, one section at a time.</p>
-    <button class="btn-primary" onclick="startTour()">
+    <button class="btn-primary" id="start-button" onclick="startTour()" disabled>
       Start at Dore &amp; Totley <span class="material-symbols-outlined">arrow_forward</span>
     </button>
     <p class="start-alt">or click any part of the route</p>
@@ -475,20 +447,28 @@
 let GEOJSON, ROUTE_LINES, WATERSHED, PROJECTS, POIS;
 
 async function loadData() {
-  [GEOJSON, ROUTE_LINES, WATERSHED, PROJECTS, POIS] = await Promise.all([
-    fetch('./data/sheaf.geojson').then(r => r.json()),
-    fetch('./data/routes.geojson').then(r => r.json()),
-    fetch('./data/watershed.geojson').then(r => r.json()),
-    fetch('./data/projects.json').then(r => r.json()),
-    fetch('./data/pois.json').then(r => r.json()),
-  ]);
+  const get = async file => {
+    const r = await fetch(`./data/${file}`);
+    if (!r.ok) throw new Error(`${file}: ${r.status}`);
+    return r.json();
+  };
+  [GEOJSON, ROUTE_LINES, WATERSHED, PROJECTS, POIS] = await Promise.all(
+    ['sheaf.geojson', 'routes.geojson', 'watershed.geojson', 'projects.json', 'pois.json'].map(get));
 }
+
+function showLoadError(err) {
+  if (err) console.error(err);
+  document.getElementById('load-error').style.display = 'block';
+}
+
+// Text from the data files is shown as plain text, never run as HTML
+const ESCAPES = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+const esc = text => String(text ?? '').replace(/[&<>"']/g, ch => ESCAPES[ch]);
+// Only ordinary web and email links are allowed from the data files
+const safeUrl = url => /^(https:\/\/|mailto:)/i.test(url || '') ? esc(url) : '';
 
 const MAPTILER_KEY = 'BMdt5WFiajvBv7IxeSBj';
 
-// ── DATA ─────────────────────────────────────────────────────────────────────
-
-// Projects — segment_id OR lat/lon for point projects
 // ── SECTION ORDER ─────────────────────────────────────────────────────────────
 
 const SECTION_ORDER = [
@@ -513,12 +493,14 @@ function setupDataIndices() {
     if (!sectionMap[s]) sectionMap[s] = [];
     sectionMap[s].push(f);
   });
-  sections = SECTION_ORDER.filter(s => sectionMap[s]);
+  // Listed order first; a section that's in the data but not in the list goes on the end
+  const unlisted = Object.keys(sectionMap).filter(s => !SECTION_ORDER.includes(s));
+  if (unlisted.length) console.warn('Sections missing from SECTION_ORDER:', unlisted);
+  sections = [...SECTION_ORDER.filter(s => sectionMap[s]), ...unlisted];
   segmentSection = {};
   GEOJSON.features.forEach(f => { segmentSection[f.properties.segment_id] = f.properties.section; });
 }
 // ── LAYER DEFINITIONS ─────────────────────────────────────────────────────────
-// Each layer: which segments it shows, offset, colour
 // Which segments belong to each route is decided by scripts/build_routes.py,
 // which writes data/routes.geojson. Here we only say how each route looks.
 const LAYERS = {
@@ -541,6 +523,9 @@ let poiMarkers     = [];
 
 // ── MAP ───────────────────────────────────────────────────────────────────────
 
+// If nothing has appeared after 20 seconds (no connection, map service down), say so
+setTimeout(() => { if (!mapReady) showLoadError(); }, 20000);
+
 const map = new maplibregl.Map({
   container: 'map',
   style: `https://api.maptiler.com/maps/dataviz/style.json?key=${MAPTILER_KEY}`,
@@ -552,7 +537,9 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl({ visualizePitch:true }), 'bottom-right');
 
-map.on('load', async () => {
+map.on('load', () => setupMap().catch(showLoadError));
+
+async function setupMap() {
   await loadData();
   setupDataIndices();
   const walkKm = ROUTE_LINES.features
@@ -724,9 +711,11 @@ map.on('load', async () => {
   map.once('idle', () => { if (!userMovedMap && !contextSection) fitRouteInView(); });
 
   mapReady = true;
+  document.getElementById('load-error').style.display = 'none';
+  document.getElementById('start-button').disabled = false;
   updateMapLayers();
   renderPOIs();
-});
+}
 
 // ── Framing the whole route ─────────────────────────────────────────────────
 // The map is tilted, so a plain "fit bounds" (which assumes a flat, top-down view)
@@ -735,15 +724,22 @@ map.on('load', async () => {
 let userMovedMap = false;
 const START_PITCH = 30;
 
+// Space to keep clear around whatever we're framing: the sidebar, buttons and map controls
+function mapPadding() {
+  const W = map.getContainer().clientWidth;
+  const sidebarOpen = !document.getElementById('sidebar').classList.contains('collapsed');
+  const pad = { top:60, bottom:50, right:90, left: sidebarOpen ? 400 : 50 };
+  if (W - pad.left - pad.right < 100) pad.left = 50;          // very narrow: ignore the sidebar
+  return pad;
+}
+
 function fitRouteInView() {
   const coords = ROUTE_LINES.features
     .filter(f => f.properties.route !== 'vision')
     .flatMap(f => f.geometry.coordinates);
   const lngs = coords.map(c => c[0]), lats = coords.map(c => c[1]);
   const W = map.getContainer().clientWidth, H = map.getContainer().clientHeight;
-  const sidebarOpen = !document.getElementById('sidebar').classList.contains('collapsed');
-  const pad = { top:60, bottom:50, right:90, left: sidebarOpen ? 400 : 50 };
-  if (W - pad.left - pad.right < 100) pad.left = 50;          // very narrow: ignore the sidebar
+  const pad = mapPadding();
   const availW = W - pad.left - pad.right, availH = H - pad.top - pad.bottom;
   if (availW < 50 || availH < 50) return;
 
@@ -801,7 +797,6 @@ function userToggleVision() {
 }
 
 function startTour() {
-  if (!mapReady) return;
   if (!visionOn && !userSetVision) toggleVision();
   selectSection(sections[0]);
 }
@@ -868,7 +863,6 @@ function makeMarkerEl() {
   icon.style.cssText = 'font-size:16px; color:white; pointer-events:none; user-select:none;';
   icon.textContent = 'construction';
   el.appendChild(icon);
-  el._inner = el; // self-reference so highlight code works unchanged
   return el;
 }
 
@@ -894,7 +888,7 @@ function updateProjectMarkers() {
       .setLngLat(lngLat)
       .addTo(map);
 
-    el._inner.addEventListener('click', (e) => {
+    el.addEventListener('click', (e) => {
       e.stopPropagation();
       showProject(proj);
     });
@@ -962,6 +956,11 @@ function backToSection() {
   if (contextSection) selectSection(contextSection);
 }
 
+function showProjectById(id) {
+  const proj = PROJECTS.find(p => p.project_id === id);
+  if (proj) showProject(proj);
+}
+
 function showProject(proj) {
   activeSection = null;
   activeProject = proj.project_id;
@@ -971,24 +970,21 @@ function showProject(proj) {
   showDetailPanel();
 
   document.getElementById('detail-progress').innerHTML = contextSection
-    ? `<button class="btn-link" onclick="backToSection()"><span class="material-symbols-outlined">arrow_back</span> Back to ${contextSection}</button>`
+    ? `<button class="btn-link" onclick="backToSection()"><span class="material-symbols-outlined">arrow_back</span> Back to ${esc(contextSection)}</button>`
     : '';
   document.getElementById('detail-section-name').innerHTML =
-    `<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:var(--vision);margin-right:5px">construction</span>${proj.title}`;
+    `<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:var(--vision);margin-right:5px">construction</span>${esc(proj.title)}`;
   renderFooter(contextSection);
 
   let html = '';
   if (proj.description) {
-    html += `<p style="font-size:13px;color:var(--muted);line-height:1.75;font-weight:400;margin-bottom:12px">${proj.description}</p>`;
+    html += `<p style="font-size:13px;color:var(--muted);line-height:1.75;font-weight:400;margin-bottom:12px">${esc(proj.description)}</p>`;
   }
-  if (proj.image_url) {
-    html += `<img src="${proj.image_url}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
-  }
-  if (proj.image2_url) {
-    html += `<img src="${proj.image2_url}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
-  }
-  if (proj.link) {
-    html += `<a href="${proj.link}" target="_blank" class="project-card-link">Read more →</a>`;
+  [proj.image_url, proj.image2_url].map(safeUrl).filter(Boolean).forEach(src => {
+    html += `<img src="${src}" style="width:100%;border-radius:4px;display:block;margin-bottom:8px;max-height:200px;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)" alt="">`;
+  });
+  if (safeUrl(proj.link)) {
+    html += `<a href="${safeUrl(proj.link)}" target="_blank" rel="noopener" class="project-card-link">Read more →</a>`;
   }
 
   // CTAs
@@ -1000,11 +996,11 @@ function showProject(proj) {
     { key:'url_donate',     icon:'payments',           label:'Donate to help unlock this route' },
     { key:'url_volunteer',  icon:'volunteer_activism', label:'Volunteer to improve the route' },
   ];
-  const activeCTAs = ctas.filter(c => proj[c.key]);
+  const activeCTAs = ctas.filter(c => safeUrl(proj[c.key]));
   if (activeCTAs.length) {
     html += `<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:8px">`;
     activeCTAs.forEach(c => {
-      html += `<a href="${proj[c.key]}" target="_blank" style="
+      html += `<a href="${safeUrl(proj[c.key])}" target="_blank" rel="noopener" style="
         display:flex;align-items:center;gap:10px;
         padding:9px 12px;border-radius:4px;
         background:rgba(155,89,182,0.07);border:1px solid rgba(155,89,182,0.2);
@@ -1040,7 +1036,7 @@ function renderFooter(name) {
     ? `<button class="btn-link" onclick="navigateSection(-1)"><span class="material-symbols-outlined">arrow_back</span> Previous</button>`
     : '';
   footer.innerHTML = i < sections.length - 1
-    ? `<button class="btn-primary" onclick="navigateSection(1)"><span>Next: ${sections[i + 1]}</span><span class="material-symbols-outlined">arrow_forward</span></button>${prev}`
+    ? `<button class="btn-primary" onclick="navigateSection(1)"><span>Next: ${esc(sections[i + 1])}</span><span class="material-symbols-outlined">arrow_forward</span></button>${prev}`
     : `<div class="end-note">You've reached the Don</div><button class="btn-secondary" onclick="startTour()">Start again</button>${prev}`;
 }
 
@@ -1049,7 +1045,7 @@ function flyToSection(name) {
   if (!coords.length) return;
   const lngs = coords.map(c=>c[0]), lats = coords.map(c=>c[1]);
   map.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]],
-    { padding:{top:80,bottom:120,left:330,right:80}, maxZoom:17, duration:850 });
+    { padding:mapPadding(), maxZoom:17, duration:850 });
 }
 
 // ── DETAIL PANEL ──────────────────────────────────────────────────────────────
@@ -1142,10 +1138,10 @@ function updateDetail() {
       sectionProjects.forEach(proj => {
         html += `
           <div class="project-card">
-            <div class="project-card-title">${proj.title}</div>
-            ${proj.description ? `<div class="project-card-desc">${proj.description}</div>` : ''}
-            ${proj.image_url ? `<img class="project-card-img" src="${proj.image_url}" onclick="openLightbox(this.src)" alt="">` : ''}
-            <a class="project-card-link" href="#" onclick="event.preventDefault();showProject(${JSON.stringify(proj).replace(/"/g,'&quot;')})">Read more →</a>
+            <div class="project-card-title">${esc(proj.title)}</div>
+            ${proj.description ? `<div class="project-card-desc">${esc(proj.description)}</div>` : ''}
+            ${safeUrl(proj.image_url) ? `<img class="project-card-img" src="${safeUrl(proj.image_url)}" onclick="openLightbox(this.src)" alt="">` : ''}
+            <a class="project-card-link" href="#" onclick="event.preventDefault();showProjectById('${esc(proj.project_id)}')">Read more →</a>
           </div>`;
       });
     } else {
@@ -1173,7 +1169,7 @@ function renderPOIs() {
     el.appendChild(icon);
 
     const popup = new maplibregl.Popup({ offset:16, maxWidth:'200px', closeButton:false })
-      .setHTML(`<div class="popup-title">${poi.name}</div><div class="popup-desc">${poi.layer}</div>`);
+      .setHTML(`<div class="popup-title">${esc(poi.name)}</div><div class="popup-desc">${esc(poi.layer)}</div>`);
 
     el.addEventListener('mouseenter', () => { popup.setLngLat([poi.lng, poi.lat]).addTo(map); });
     el.addEventListener('mouseleave', () => popup.remove());
