@@ -143,7 +143,32 @@ def chain_coords(chain):
     return out
 
 
+FLAGS = ["proposed", "walking_default", "step_free", "cycleway", "on_road", "one_way", "steep"]
+
+
+def check(master):
+    """Stop with a clear message if the master file has a mistake the map would trip over."""
+    problems, seen = [], set()
+    for i, f in enumerate(master["features"]):
+        p = f["properties"]
+        name = p.get("segment_id") or f"feature {i + 1}"
+        if not p.get("segment_id"):
+            problems.append(f"{name}: no segment_id")
+        elif p["segment_id"] in seen:
+            problems.append(f"{name}: segment_id used more than once")
+        seen.add(p.get("segment_id"))
+        if not p.get("section"):
+            problems.append(f"{name}: no section")
+        problems += [f"{name}: '{k}' must be true or false" for k in FLAGS if not isinstance(p.get(k), bool)]
+        g = f.get("geometry") or {}
+        if g.get("type") != "LineString" or len(g.get("coordinates", [])) < 2:
+            problems.append(f"{name}: geometry must be a single line (LineString), got {g.get('type')}")
+    if problems:
+        raise SystemExit("Problems in the master file:\n  " + "\n  ".join(problems))
+
+
 def build(master):
+    check(master)
     features = []
     for route, rule in ROUTES.items():
         by_section = defaultdict(list)
