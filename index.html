@@ -17,8 +17,8 @@
     -webkit-font-smoothing: antialiased;
   }
 </style>
-<script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
-<link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet">
 <style>
   :root {
     --walk:        #E07820;   /* amber  — walk */
@@ -50,7 +50,12 @@
     box-shadow:var(--shadow);
     transition: transform 0.3s ease;
   }
-  #sidebar.collapsed { transform: translateX(-360px); }
+  #sidebar.collapsed { transform: translateX(-100%); }
+
+  /* Narrow screens: leave room for the collapse tab beside the panel */
+  @media (max-width: 700px) {
+    #sidebar { width: calc(100vw - 40px); max-width: 360px; }
+  }
 
   /* Collapse tab — always visible on right edge of sidebar */
   #collapse-tab {
@@ -754,6 +759,7 @@ function updateMarkerHighlights() {
 // ── SECTION SELECTION ─────────────────────────────────────────────────────────
 
 function selectSection(name) {
+  if (document.getElementById('sidebar').classList.contains('collapsed')) toggleSidebar();
   activeSection = name;
   activeProject = null;
   updateMapLayers();
@@ -960,6 +966,9 @@ function toggleSidebar() {
   // Nudge map to rerender
   setTimeout(() => map.resize(), 310);
 }
+
+// Start with the panel collapsed on narrow screens so the map is visible first
+if (window.innerWidth < 700) toggleSidebar();
 </script>
 </body>
 </html>
