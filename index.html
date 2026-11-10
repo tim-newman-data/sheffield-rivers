@@ -351,6 +351,27 @@
   }
   #lightbox-close:hover { opacity:1; }
 
+  /* Map / Satellite switch */
+  #basemap-switch {
+    position:absolute; top:12px; right:12px; z-index:15;
+    display:flex; background:#fff; border:1px solid var(--border);
+    border-radius:6px; box-shadow:var(--shadow); overflow:hidden;
+  }
+  #basemap-switch button {
+    border:none; background:#fff; padding:7px 12px; cursor:pointer;
+    font-family:inherit; font-size:12px; font-weight:600; color:var(--muted);
+  }
+  #basemap-switch button + button { border-left:1px solid var(--border); }
+  #basemap-switch button.active { background:var(--accent); color:#fff; }
+
+  /* Navigate link in a section */
+  .nav-link {
+    display:inline-flex; align-items:center; gap:4px; margin-top:4px;
+    font-size:12px; font-weight:600; color:var(--accent); text-decoration:none;
+  }
+  .nav-link:hover { text-decoration:underline; }
+  .nav-link .material-symbols-outlined { font-size:16px; }
+
   /* MapLibre overrides */
   .maplibregl-popup-close-button { font-size:16px !important; color:var(--muted) !important; }
   .maplibregl-ctrl-attrib { background:rgba(255,255,255,0.85)!important; font-size:9px!important; }
@@ -366,6 +387,11 @@
 </div>
 
 <div id="map"></div>
+
+<div id="basemap-switch" role="group" aria-label="Map style">
+  <button class="active" data-style="map" onclick="setBasemap('map')">Map</button>
+  <button data-style="satellite" onclick="setBasemap('satellite')">Satellite</button>
+</div>
 
 <div id="sidebar">
   <div id="collapse-tab" onclick="toggleSidebar()">&#8249;</div>
@@ -518,9 +544,9 @@ let poiMarkers     = [];
 const map = new maplibregl.Map({
   container: 'map',
   style: `https://api.maptiler.com/maps/dataviz/style.json?key=${MAPTILER_KEY}`,
-  center: [-1.50993, 53.34640],
-  zoom: 13,
-  pitch: 55, bearing: -25, antialias: true,
+  center: [-1.489, 53.356],
+  zoom: 12.5,
+  pitch: 30, bearing: 0, antialias: true,   // north-up so the city looks as it does on other maps
   maxZoom: 17,
 });
 
@@ -648,10 +674,66 @@ map.on('load', async () => {
     }
   });
 
+  // ── Satellite imagery (hidden until switched on) ──
+  // Slotted under the basemap's labels, so road and place names stay on top
+  try {
+    const firstLabel = map.getStyle().layers.find(l => l.type === 'symbol' && l.id !== 'oneway-arrows');
+    map.addSource('satellite', {
+      type:'raster', tileSize:256,
+      url:`https://api.maptiler.com/tiles/satellite-v2/tiles.json?key=${MAPTILER_KEY}`
+    });
+    map.addLayer({ id:'satellite', type:'raster', source:'satellite',
+      layout:{ visibility:'none' } }, firstLabel ? firstLabel.id : undefined);
+  } catch(e) { console.warn('Satellite layer unavailable', e); }
+
+  // ── Landmarks from OpenStreetMap (via the basemap's own data) ──
+  // Big supermarkets, stations, parks and museums, so people can get their bearings
+  try {
+    const labelLayer = map.getStyle().layers.find(l => l.id === 'Place labels') ||
+                       map.getStyle().layers.find(l => l.type === 'symbol' && l.source);
+    const vectorSource = map.getStyle().layers.find(l => l.id === 'Road labels')?.source || labelLayer.source;
+    const font = map.getLayoutProperty(labelLayer.id, 'text-font') || ['Noto Sans Regular'];
+    const bigShops = ['Tesco','Sainsbury','Asda','Morrisons','Aldi','Lidl','Waitrose','M&S','Marks'];
+    const LANDMARKS = [
+      { id:'shops',    color:'#4a4f54', filter:['all', ['==',['get','class'],'grocery'],
+                         ['any', ...bigShops.map(b => ['in', b, ['to-string',['get','name']]])]] },
+      { id:'stations', color:'#1670B0', filter:['all', ['==',['get','class'],'railway'],
+                         ['in',['get','subclass'],['literal',['station','halt']]]] },
+      { id:'parks',    color:'#3a7d44', filter:['==',['get','class'],'park'] },
+      { id:'museums',  color:'#8a5a2b', filter:['in',['get','class'],['literal',['museum','attraction']]] },
+    ];
+    LANDMARKS.forEach(l => {
+      map.addLayer({ id:`landmark-${l.id}-dot`, type:'circle', source:vectorSource, 'source-layer':'poi',
+        minzoom:12.5, filter:['all', l.filter, ['has','name']],
+        paint:{ 'circle-radius':3.5, 'circle-color':l.color, 'circle-stroke-color':'#fff', 'circle-stroke-width':1.5 } });
+      map.addLayer({ id:`landmark-${l.id}`, type:'symbol', source:vectorSource, 'source-layer':'poi',
+        minzoom:12.5, filter:['all', l.filter, ['has','name']],
+        layout:{ 'text-field':['get','name'], 'text-font':font, 'text-size':11,
+                 'text-anchor':'left', 'text-offset':[0.6, 0], 'text-max-width':10, 'text-optional':false },
+        paint:{ 'text-color':l.color, 'text-halo-color':'#fff', 'text-halo-width':1.4 } });
+    });
+  } catch(e) { console.warn('Landmark labels unavailable', e); }
+
+  // Start with the whole route in view, allowing for the sidebar if it's open
+  const routeCoords = ROUTE_LINES.features
+    .filter(f => f.properties.route !== 'vision')
+    .flatMap(f => f.geometry.coordinates);
+  const lngs = routeCoords.map(c => c[0]), lats = routeCoords.map(c => c[1]);
+  const sidebarOpen = !document.getElementById('sidebar').classList.contains('collapsed');
+  map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+    { padding:{ top:50, bottom:50, left: sidebarOpen ? 400 : 50, right:90 }, duration:0 });
+
   mapReady = true;
   updateMapLayers();
   renderPOIs();
 });
+
+function setBasemap(style) {
+  if (!map.getLayer('satellite')) return;
+  map.setLayoutProperty('satellite', 'visibility', style === 'satellite' ? 'visible' : 'none');
+  document.querySelectorAll('#basemap-switch button').forEach(b =>
+    b.classList.toggle('active', b.dataset.style === style));
+}
 
 // ── CONTROLS ──────────────────────────────────────────────────────────────────
 
@@ -996,6 +1078,19 @@ function updateDetail() {
   document.getElementById('detail-section-name').textContent = activeSection;
 
   let html = sectionSummary(activeSection);
+
+  // Start of the section = the most upstream point of its route lines (they all run downstream)
+  const starts = ROUTE_LINES.features
+    .filter(f => f.properties.section === activeSection && f.properties.route !== 'vision')
+    .map(f => f.geometry.coordinates[0]);
+  if (starts.length) {
+    const [lng, lat] = starts.reduce((a, b) =>
+      (a[0] * 0.0532 + a[1] * 0.0577) <= (b[0] * 0.0532 + b[1] * 0.0577) ? a : b);
+    const mode = activeLayers.has('walk') || activeLayers.has('stepfree') ? 'walking' : 'bicycling';
+    html += `<a class="nav-link" target="_blank" rel="noopener"
+      href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=${mode}">
+      <span class="material-symbols-outlined">directions</span> Directions to the start of this section</a>`;
+  }
 
   if (visionOn) {
     const sectionProjects = PROJECTS.filter(proj =>
