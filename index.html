@@ -322,11 +322,6 @@
 
 <div id="sidebar">
   <div id="collapse-tab" onclick="toggleSidebar()">&#8249;</div>
-  <div id="sidebar-header">
-    <img src="https://static.wixstatic.com/media/f2e522_5f689e579c2847af9f330fe6f89ed894~mv2.jpg/v1/fill/w_362,h_160,al_c,q_80,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo_rgb.jpg"" alt="Sheaf &amp; Porter Rivers Trust" id="trust-logo">
-    <p>River Sheaf Active Travel Corridor</p>
-  </div>
-
   <div id="layer-controls">
     <span class="control-label">Show routes</span>
 
@@ -400,15 +395,27 @@
 let GEOJSON, WATERSHED, PROJECTS, POIS;
 
 async function loadData() {
-  [GEOJSON, WATERSHED, PROJECTS, POIS] = await Promise.all([
-    fetch('./data/sheaf.geojson').then(r => r.json()),
-    fetch('./data/watershed.geojson').then(r => r.json()),
-    fetch('./data/projects.json').then(r => r.json()),
-    fetch('./data/pois.json').then(r => r.json()),
-  ]);
+  try {
+    const responses = await Promise.all([
+      fetch('./data/sheaf.geojson'),
+      fetch('./data/watershed.geojson'),
+      fetch('./data/projects.json'),
+      fetch('./data/pois.json'),
+    ]);
+    responses.forEach((r, i) => {
+      const names = ['sheaf.geojson','watershed.geojson','projects.json','pois.json'];
+      console.log(`${names[i]}: ${r.status} ${r.statusText} (${r.url})`);
+    });
+    [GEOJSON, WATERSHED, PROJECTS, POIS] = await Promise.all(
+      responses.map(r => r.json())
+    );
+    console.log('Data loaded:', GEOJSON.features.length, 'features');
+  } catch(e) {
+    console.error('loadData failed:', e);
+  }
 }
 
-const MAPTILER_KEY = 'BMdt5WFiajvBv7IxeSBj';
+const MAPTILER_KEY = 'WMqBimDurJHRmbcELx6H';
 
 // ── DATA ─────────────────────────────────────────────────────────────────────
 
